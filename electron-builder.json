@@ -1,0 +1,26 @@
+{
+  "appId": "jp.unlitcube.nfc-tag-studio",
+  "productName": "NFC Tag Studio",
+  "copyright": "Copyright (c) 2026 UnlitCube",
+  "directories": { "output": "release", "buildResources": "build" },
+  "files": ["out/**/*", "package.json", "!**/*.map"],
+  "asarUnpack": ["**/node_modules/koffi/**", "**/node_modules/@koromix/**"],
+  "publish": null,
+  "win": {
+    "target": [{ "target": "portable", "arch": ["x64"] }, { "target": "zip", "arch": ["x64"] }],
+    "artifactName": "${productName}-${version}-win-${arch}.${ext}"
+  },
+  "portable": {
+    "artifactName": "${productName}-${version}-win-${arch}-portable.${ext}"
+  },
+  "mac": {
+    "target": [{ "target": "dmg", "arch": ["arm64", "x64"] }, { "target": "zip", "arch": ["arm64", "x64"] }],
+    "category": "public.app-category.utilities",
+    "artifactName": "${productName}-${version}-mac-${arch}.${ext}"
+  },
+  "linux": {
+    "target": [{ "target": "AppImage", "arch": ["x64"] }],
+    "category": "Utility",
+    "artifactName": "${productName}-${version}-linux-x64.${ext}"
+  }
+}
