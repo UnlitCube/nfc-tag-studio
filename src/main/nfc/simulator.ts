@@ -1,0 +1,416 @@
+// Virtual reader + virtual tag (the built-in simulator). Owner: agent "main-nfc".
+//
+// The simulator is a full ReaderBackend: it hands out CardConnections whose
+// transmit() interprets APDUs at the same level real hardware does, so every
+// layer above (tag ops, issue engine) runs unchanged against it. It understands
+//   - storage pseudo-APDUs:  FF CA / FF B0 / FF D6 / FF 82 / FF 86
+//   - acr122 raw framing:    FF 00 00 00 Lc D4 42 <cmd>
+//   - transparent raw:       FF C2 00 01 Lc 95 <len> <cmd>
+// and emulates NTAG21x (READ/FAST_READ/WRITE/GET_VERSION/PWD_AUTH/READ_CNT/
+// READ_SIG, with password protection) and MIFARE Classic (per-sector key check).
+//
+// Invariants honoured as "hardware": UID (NTAG pages 0-1, MIFARE block 0) is
+// never writable; there is no UID-changing command; MIFARE blocks open only when
+// the loaded key matches the sector trailer.
+
+import type { ReaderInfo, SimulatorState } from '@shared/types';
+import type { TagKind } from '@shared/tags';
+import {
+  factoryImage,
+  isForbiddenUnit,
+  isMifare,
+  isNtag,
+  mifareIsTrailer,
+  mifareSectorOfBlock,
+  mifareTrailerBlock,
+  ntagPages,
+} from '@shared/tags';
+import { bytesToHex } from '@shared/hex';
+import { VIRTUAL_READER_NAME } from '@shared/reader';
+import { OpError } from '../errors';
+import type { BackendEvent, CardConnection, ReaderBackend } from './backend';
+import { NTAG_ACK, NTAG_CMD } from './apdu';
+import { mifareTrailerReadbackMask } from './mifare';
+
+const EMPTY = new Uint8Array(0);
+
+/**
+ * Transport status the simulator reports for a tag NAK. Real readers surface the
+ * 4-bit NTAG NAK (protected-page READ, failed PWD_AUTH) with a NON-ZERO transport
+ * status, not a clean status-0 short read, so we model it the same way. driver.ts
+ * recognises the NAK nibble in the payload and maps it to ACCESS_DENIED
+ * regardless of this status byte, so a protected page is reported 'denied' (not a
+ * generic read 'error') on the raw drivers too.
+ */
+const NTAG_NAK_STATUS = 0x01;
+
+function bytesEq(a: Uint8Array, b: Uint8Array): boolean {
+  if (a.length !== b.length) return false;
+  for (let i = 0; i < a.length; i++) if (a[i] !== b[i]) return false;
+  return true;
+}
+
+let uidSeq = 0;
+
+/** A pseudo-unique UID: byte 0 = 0x04 (NXP), the rest derived from a counter. */
+function makeUid(bytes: number): Uint8Array {
+  const u = new Uint8Array(bytes);
+  const n = ++uidSeq;
+  u[0] = 0x04;
+  for (let i = 1; i < bytes; i++) u[i] = (n * 41 + i * 97 + 0x10) & 0xff;
+  return u;
+}
+
+/** PC/SC Part 3 storage-card pseudo-ATR carrying the card-name hint. */
+function storageAtr(kind: TagKind): Uint8Array {
+  const cardName = isMifare(kind) ? (kind === 'MIFARE_CLASSIC_1K' ? 0x0001 : 0x0002) : 0x0003; // 0003 = Type 2
+  const body = [0x3b, 0x8f, 0x80, 0x01, 0x80, 0x4f, 0x0c, 0xa0, 0x00, 0x00, 0x03, 0x06, 0x03, (cardName >> 8) & 0xff, cardName & 0xff, 0x00, 0x00, 0x00, 0x00];
+  let tck = 0;
+  for (let i = 1; i < body.length; i++) tck ^= body[i];
+  return Uint8Array.from([...body, tck]);
+}
+
+/** GET_VERSION bytes (8) matching @shared/tags kindFromVersion. */
+function ntagVersion(kind: TagKind): Uint8Array {
+  const storageByte = kind === 'NTAG213' ? 0x0f : kind === 'NTAG215' ? 0x11 : 0x13;
+  return Uint8Array.from([0x00, 0x04, 0x04, 0x02, 0x01, 0x00, storageByte, 0x03]);
+}
+
+class VirtualTag {
+  readonly kind: TagKind;
+  readonly uid: Uint8Array;
+  readonly image: Uint8Array;
+  /** Set by a correct PWD_AUTH; reset when a fresh RF session (connect) begins. */
+  ntagAuthed = false;
+
+  constructor(kind: TagKind, uid?: Uint8Array) {
+    this.kind = kind;
+    this.uid = uid ?? makeUid(isNtag(kind) ? 7 : 4);
+    this.image = factoryImage(kind, this.uid);
+  }
+
+  get uidHex(): string {
+    return bytesToHex(this.uid);
+  }
+}
+
+function resp(data: ArrayLike<number>, sw1: number, sw2: number): Uint8Array {
+  const out = new Uint8Array(data.length + 2);
+  out.set(Array.from(data), 0);
+  out[data.length] = sw1;
+  out[data.length + 1] = sw2;
+  return out;
+}
+
+const SW_OK = { sw1: 0x90, sw2: 0x00 };
+const SW_DENIED = { sw1: 0x69, sw2: 0x82 };
+const SW_WRONG_LEN = { sw1: 0x67, sw2: 0x00 };
+const SW_AUTH_FAIL = { sw1: 0x63, sw2: 0x00 };
+const SW_UNSUPPORTED = { sw1: 0x6d, sw2: 0x00 };
+
+class VirtualConnection implements CardConnection {
+  readonly readerName = VIRTUAL_READER_NAME;
+  readonly atr: Uint8Array;
+  private readonly backend: SimulatorBackend;
+  private readonly loadedKeys = new Map<number, Uint8Array>();
+  private authedSector = -1;
+  private closed = false;
+
+  constructor(backend: SimulatorBackend, tag: VirtualTag) {
+    this.backend = backend;
+    this.atr = storageAtr(tag.kind);
+  }
+
+  async transmit(apdu: Uint8Array): Promise<Uint8Array> {
+    if (this.closed) throw new OpError('CARD_REMOVED', 'connection closed');
+    const tag = this.backend.tag;
+    if (!tag || !this.backend.present) throw new OpError('CARD_REMOVED', 'no tag on the virtual reader');
+    return this.interpret(tag, apdu);
+  }
+
+  async disconnect(): Promise<void> {
+    this.closed = true;
+  }
+
+  // --- APDU dispatch ---------------------------------------------------------
+
+  private interpret(tag: VirtualTag, apdu: Uint8Array): Uint8Array {
+    if (apdu.length >= 2 && apdu[0] === 0xff) {
+      switch (apdu[1]) {
+        case 0xca: // Get UID
+          return resp(tag.uid, SW_OK.sw1, SW_OK.sw2);
+        case 0xb0: // Read Binary
+          return this.readBinary(tag, apdu[3] ?? 0, apdu[4] ?? 0);
+        case 0xd6: // Update Binary
+          return this.updateBinary(tag, apdu[3] ?? 0, apdu.subarray(5, 5 + (apdu[4] ?? 0)));
+        case 0x82: // Load Key
+          this.loadedKeys.set(apdu[3] ?? 0, apdu.subarray(5, 5 + (apdu[4] ?? 0)).slice());
+          return resp(EMPTY, SW_OK.sw1, SW_OK.sw2);
+        case 0x86: // General Authenticate
+          return this.authenticate(tag, apdu);
+        case 0x00: // ACR122 direct transmit
+          return this.acr122(tag, apdu);
+        case 0xc2: // transparent exchange
+          return this.transparent(tag, apdu);
+        default:
+          return resp(EMPTY, SW_UNSUPPORTED.sw1, SW_UNSUPPORTED.sw2);
+      }
+    }
+    return resp(EMPTY, SW_UNSUPPORTED.sw1, SW_UNSUPPORTED.sw2);
+  }
+
+  // --- storage primitives ----------------------------------------------------
+
+  private readWrap(tag: VirtualTag, byteOffset: number, len: number): Uint8Array {
+    const img = tag.image;
+    const out = new Uint8Array(len);
+    for (let i = 0; i < len; i++) out[i] = img[(byteOffset + i) % img.length];
+    return out;
+  }
+
+  private readBinary(tag: VirtualTag, block: number, le: number): Uint8Array {
+    const length = le === 0 ? 16 : le;
+    if (isMifare(tag.kind)) {
+      if (this.authedSector !== mifareSectorOfBlock(block)) return resp(EMPTY, SW_DENIED.sw1, SW_DENIED.sw2);
+      const raw = this.readWrap(tag, block * 16, length);
+      // Real hardware never returns the trailer's Key A (reads back as 00), and
+      // hides Key B unless the access conditions allow it. Match that so the
+      // simulator does not paper over a real-hardware verify mismatch.
+      const out = mifareIsTrailer(block) ? mifareTrailerReadbackMask(raw) : raw;
+      return resp(out, SW_OK.sw1, SW_OK.sw2);
+    }
+    if (this.ntagReadProtected(tag, block)) return resp(EMPTY, SW_DENIED.sw1, SW_DENIED.sw2);
+    return resp(this.readWrap(tag, block * 4, length), SW_OK.sw1, SW_OK.sw2);
+  }
+
+  private updateBinary(tag: VirtualTag, block: number, data: Uint8Array): Uint8Array {
+    if (isMifare(tag.kind)) {
+      if (block === 0) return resp(EMPTY, SW_DENIED.sw1, SW_DENIED.sw2); // manufacturer block
+      if (this.authedSector !== mifareSectorOfBlock(block)) return resp(EMPTY, SW_DENIED.sw1, SW_DENIED.sw2);
+      if (data.length !== 16) return resp(EMPTY, SW_WRONG_LEN.sw1, SW_WRONG_LEN.sw2);
+      tag.image.set(data.subarray(0, 16), block * 16);
+      return resp(EMPTY, SW_OK.sw1, SW_OK.sw2);
+    }
+    if (isForbiddenUnit(tag.kind, block)) return resp(EMPTY, SW_DENIED.sw1, SW_DENIED.sw2); // UID pages
+    if (this.ntagWriteProtected(tag, block)) return resp(EMPTY, SW_DENIED.sw1, SW_DENIED.sw2);
+    if (data.length < 4) return resp(EMPTY, SW_WRONG_LEN.sw1, SW_WRONG_LEN.sw2);
+    tag.image.set(data.subarray(0, 4), block * 4);
+    return resp(EMPTY, SW_OK.sw1, SW_OK.sw2);
+  }
+
+  private authenticate(tag: VirtualTag, apdu: Uint8Array): Uint8Array {
+    // FF 86 00 00 05  01 00 <block> <keyType> <slot>
+    if (!isMifare(tag.kind)) return resp(EMPTY, SW_AUTH_FAIL.sw1, SW_AUTH_FAIL.sw2);
+    const block = apdu[7] ?? 0;
+    const keyTypeByte = apdu[8] ?? 0x60;
+    const slot = apdu[9] ?? 0;
+    const key = this.loadedKeys.get(slot);
+    if (!key || key.length !== 6) return resp(EMPTY, SW_AUTH_FAIL.sw1, SW_AUTH_FAIL.sw2);
+    const sector = mifareSectorOfBlock(block);
+    const trailer = mifareTrailerBlock(sector) * 16;
+    const want = keyTypeByte === 0x61 ? tag.image.subarray(trailer + 10, trailer + 16) : tag.image.subarray(trailer, trailer + 6);
+    if (bytesEq(key, want)) {
+      this.authedSector = sector;
+      return resp(EMPTY, SW_OK.sw1, SW_OK.sw2);
+    }
+    return resp(EMPTY, SW_AUTH_FAIL.sw1, SW_AUTH_FAIL.sw2);
+  }
+
+  // --- NTAG password protection ---------------------------------------------
+
+  private ntagAuth0(tag: VirtualTag): { auth0: number; readProtected: boolean } {
+    const p = ntagPages(tag.kind);
+    const cfg0 = tag.image.subarray(p.cfg0 * 4, p.cfg0 * 4 + 4);
+    const cfg1 = tag.image.subarray(p.cfg1 * 4, p.cfg1 * 4 + 4);
+    return { auth0: cfg0[3], readProtected: (cfg1[0] & 0x80) !== 0 };
+  }
+
+  private ntagReadProtected(tag: VirtualTag, page: number): boolean {
+    if (!isNtag(tag.kind) || tag.ntagAuthed) return false;
+    const { auth0, readProtected } = this.ntagAuth0(tag);
+    return readProtected && page >= auth0;
+  }
+
+  private ntagWriteProtected(tag: VirtualTag, page: number): boolean {
+    if (!isNtag(tag.kind) || tag.ntagAuthed) return false;
+    const { auth0 } = this.ntagAuth0(tag);
+    return page >= auth0;
+  }
+
+  // --- raw NFC-A framing -----------------------------------------------------
+
+  private acr122(tag: VirtualTag, apdu: Uint8Array): Uint8Array {
+    // FF 00 00 00 Lc  D4 42 <cmd>   (Lc counts D4 42 + cmd)
+    if (apdu[5] !== 0xd4 || apdu[6] !== 0x42) return resp(EMPTY, SW_UNSUPPORTED.sw1, SW_UNSUPPORTED.sw2);
+    const cmd = apdu.subarray(7, 5 + (apdu[4] ?? 0));
+    const r = this.rawCommand(tag, cmd);
+    return resp([0xd5, 0x43, r.status, ...Array.from(r.payload)], SW_OK.sw1, SW_OK.sw2);
+  }
+
+  private transparent(tag: VirtualTag, apdu: Uint8Array): Uint8Array {
+    // FF C2 00 01 Lc  95 <len> <cmd>
+    if (apdu[2] !== 0x00 || apdu[3] !== 0x01) return resp(EMPTY, SW_UNSUPPORTED.sw1, SW_UNSUPPORTED.sw2);
+    const body = apdu.subarray(5, 5 + (apdu[4] ?? 0));
+    let cmd: Uint8Array | null = null;
+    let i = 0;
+    while (i + 2 <= body.length) {
+      const tag95 = body[i];
+      const len = body[i + 1];
+      if (tag95 === 0x95) {
+        cmd = body.subarray(i + 2, i + 2 + len);
+        break;
+      }
+      i += 2 + len;
+    }
+    if (!cmd) return resp(EMPTY, SW_UNSUPPORTED.sw1, SW_UNSUPPORTED.sw2);
+    const r = this.rawCommand(tag, cmd);
+    const out = [0xc0, 0x03, 0x00, r.status, 0x00, 0x97, r.payload.length & 0xff, ...Array.from(r.payload)];
+    return resp(out, SW_OK.sw1, SW_OK.sw2);
+  }
+
+  /** Interpret one native NFC-A command. status 0 = ok, non-zero = transport error. */
+  private rawCommand(tag: VirtualTag, cmd: Uint8Array): { status: number; payload: Uint8Array } {
+    if (cmd.length === 0) return { status: 0x01, payload: EMPTY };
+    if (isMifare(tag.kind)) return { status: 0x01, payload: EMPTY }; // raw NFC-A not modelled for MIFARE
+    const nak = (): { status: number; payload: Uint8Array } => ({ status: NTAG_NAK_STATUS, payload: Uint8Array.from([0x00]) });
+    switch (cmd[0]) {
+      case NTAG_CMD.GET_VERSION:
+        return { status: 0, payload: ntagVersion(tag.kind) };
+      case NTAG_CMD.READ: {
+        const page = cmd[1] ?? 0;
+        if (this.ntagReadProtected(tag, page)) return nak();
+        return { status: 0, payload: this.readWrap(tag, page * 4, 16) };
+      }
+      case NTAG_CMD.FAST_READ: {
+        const start = cmd[1] ?? 0;
+        const end = cmd[2] ?? 0;
+        if (this.ntagReadProtected(tag, start)) return nak();
+        return { status: 0, payload: this.readWrap(tag, start * 4, (end - start + 1) * 4) };
+      }
+      case NTAG_CMD.WRITE: {
+        const page = cmd[1] ?? 0;
+        if (isForbiddenUnit(tag.kind, page) || this.ntagWriteProtected(tag, page)) return nak();
+        tag.image.set(cmd.subarray(2, 6), page * 4);
+        return { status: 0, payload: Uint8Array.from([NTAG_ACK]) };
+      }
+      case NTAG_CMD.PWD_AUTH: {
+        const pwd = cmd.subarray(1, 5);
+        const p = ntagPages(tag.kind);
+        const tagPwd = tag.image.subarray(p.pwd * 4, p.pwd * 4 + 4);
+        if (bytesEq(pwd, tagPwd)) {
+          tag.ntagAuthed = true;
+          return { status: 0, payload: tag.image.subarray(p.pack * 4, p.pack * 4 + 2).slice() };
+        }
+        return nak();
+      }
+      case NTAG_CMD.READ_CNT:
+        return { status: 0, payload: Uint8Array.from([0x00, 0x00, 0x00]) }; // counters disabled by default
+      case NTAG_CMD.READ_SIG:
+        return { status: 0, payload: ntagSignature(tag) };
+      default:
+        return { status: 0x01, payload: EMPTY };
+    }
+  }
+}
+
+/** Deterministic 32-byte "originality signature" (display only; not a real ECC sig). */
+function ntagSignature(tag: VirtualTag): Uint8Array {
+  const out = new Uint8Array(32);
+  for (let i = 0; i < 32; i++) out[i] = (tag.uid[i % tag.uid.length] ^ (i * 7 + 0x5a)) & 0xff;
+  return out;
+}
+
+/** The simulator backend. Also exposes control methods used by the service. */
+export class SimulatorBackend implements ReaderBackend {
+  readonly id = 'simulator' as const;
+  private enabled = false;
+  present = false;
+  tag: VirtualTag | null = null;
+  private listener: ((e: BackendEvent) => void) | null = null;
+
+  async start(listener: (e: BackendEvent) => void): Promise<void> {
+    this.listener = listener;
+    this.emitReaders();
+  }
+
+  async stop(): Promise<void> {
+    this.listener = null;
+  }
+
+  async refresh(): Promise<void> {
+    this.emitReaders();
+  }
+
+  readers(): ReaderInfo[] {
+    return this.enabled ? [this.readerInfo()] : [];
+  }
+
+  async connect(readerName: string): Promise<CardConnection> {
+    if (readerName !== VIRTUAL_READER_NAME) throw new OpError('NO_READER', 'not the virtual reader');
+    if (!this.enabled || !this.present || !this.tag) throw new OpError('NO_CARD', 'no tag on the virtual reader');
+    this.tag.ntagAuthed = false; // a new RF session resets NTAG authentication
+    return new VirtualConnection(this, this.tag);
+  }
+
+  // --- control (service -> simulator) ---------------------------------------
+
+  get state(): SimulatorState {
+    return {
+      enabled: this.enabled,
+      kind: this.tag?.kind ?? 'NTAG215',
+      present: this.present,
+      uid: this.tag?.uidHex ?? '',
+    };
+  }
+
+  setEnabled(enabled: boolean, kind?: TagKind): void {
+    this.enabled = enabled;
+    if (enabled) {
+      if (!this.tag || (kind && kind !== this.tag.kind)) this.tag = new VirtualTag(kind ?? this.tag?.kind ?? 'NTAG215');
+    } else {
+      this.present = false;
+    }
+    this.emitReaders();
+    if (enabled && this.present && this.tag) {
+      this.listener?.({ type: 'card-inserted', reader: VIRTUAL_READER_NAME, atr: storageAtr(this.tag.kind) });
+    }
+  }
+
+  tap(present: boolean): void {
+    if (!this.enabled || !this.tag) return;
+    if (this.present === present) return;
+    this.present = present;
+    this.emitReaders();
+    if (present) this.listener?.({ type: 'card-inserted', reader: VIRTUAL_READER_NAME, atr: storageAtr(this.tag.kind) });
+    else this.listener?.({ type: 'card-removed', reader: VIRTUAL_READER_NAME });
+  }
+
+  newTag(kind: TagKind): void {
+    const hadCard = this.present && !!this.tag;
+    this.enabled = true;
+    this.tag = new VirtualTag(kind);
+    this.present = true;
+    this.emitReaders();
+    if (hadCard) this.listener?.({ type: 'card-removed', reader: VIRTUAL_READER_NAME });
+    this.listener?.({ type: 'card-inserted', reader: VIRTUAL_READER_NAME, atr: storageAtr(kind) });
+  }
+
+  private readerInfo(): ReaderInfo {
+    return {
+      name: VIRTUAL_READER_NAME,
+      likelyContactless: true,
+      cardPresent: this.present,
+      inUse: false,
+      atr: this.present && this.tag ? bytesToHex(storageAtr(this.tag.kind)) : null,
+      virtual: true,
+    };
+  }
+
+  private emitReaders(): void {
+    this.listener?.({ type: 'readers', readers: this.readers() });
+  }
+}
+
+export function createSimulatorBackend(): SimulatorBackend {
+  return new SimulatorBackend();
+}

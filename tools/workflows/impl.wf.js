@@ -31,12 +31,13 @@ const COMMON = `あなたは「NFC Tag Studio」（自組織で管理する NFC 
 - 契約ファイル（DESIGN.md §3）の関数シグネチャ・型・props・チャネル名・トークン名を変更しない。足りなければ報告に書く（統合担当が判断）。
 - テストは tests/<area>*.test.ts（vitest、純粋ロジック）。実機なしで通ること。境界値と実フレームで検証。
 
-■ 安全
-- 作業ディレクトリは自分の worktree。他の担当のファイルに触らない（DESIGN.md §4 の所有表）。
-- git checkout <file> / git restore / git stash を使わない。戻すときは逆編集か cp で。
-- 一時ファイルは worktree 内の scratch/<自分のID>/ に置く。%TEMP% に作らない。外部 API・フォームにリクエストを送らない。
-- git のコミットはしてよいが push・リモート作成はしない。トレーラ（Co-Authored-By 等）を付けない。
-- 報告は日本語。実際に npm run typecheck と npm run unit を worktree で流して、通った範囲だけ verified に書く。通ったふりをしない。
+■ 安全（重要: 全担当が同じ作業ディレクトリ ${ROOT} を共有する。worktree ではない）
+- 自分が所有するパス（DESIGN.md §4）の中のファイルだけを作成・編集する。他担当・契約ファイル・統合担当のパスには一切触らない。
+- git add / git commit / git checkout <file> / git restore / git stash を使わない（統合担当がまとめてコミットする。index を触ると他担当と競合する）。戻すときは逆編集で。
+- npm run build を実行しない（out/ を書いて他担当と競合する）。npm install も不要（依存は導入済み）。
+- 検証は次の 2 つだけを使う。(1) 型検査: \`npx tsc -p tsconfig.node.json --noEmit\` と \`npx tsc -p tsconfig.json --noEmit\`。他担当が同時に編集中だと自分と無関係なエラーが一時的に出ることがある。自分の所有ファイルのエラーだけを直す。(2) 単体テスト: 自分のテストだけにスコープして \`npx vitest run tests/<自分のprefix>\`（例 \`npx vitest run tests/tag\`）。全テストを実行しない（他担当のスタブは throw する）。
+- 一時ファイルは ${ROOT}/scratch/<自分のID>/ に置く。%TEMP% に作らない。外部 API・フォームにリクエストを送らない。
+- 報告は日本語。実際に実行して通った範囲だけ verified に書く。通ったふりをしない。
 
 今日は 2026-11-09。`;
 
@@ -201,10 +202,9 @@ log(`実装フェーズ: ${AREAS.length} 領域を並列実装`);
 const results = await pipeline(
   AREAS,
   (area) =>
-    agent(`${COMMON}\n\n== あなたの担当: ${area.label} ==\n${area.prompt}\n\n完了条件: 自分の担当範囲の全スタブを本実装にし、worktree で \`npm run typecheck\` と \`npm run unit\`（自分のテストを含む）を流して通す。通った範囲だけ verified に書く。`, {
+    agent(`${COMMON}\n\n== あなたの担当: ${area.label} ==\n${area.prompt}\n\n完了条件: 自分の担当範囲の全スタブを本実装にし、型検査（2 つの tsconfig、自分の所有ファイルにエラーが無いこと）と、自分のテストにスコープした \`npx vitest run tests/<prefix>\` を流して通す。通った範囲だけ verified に書く。`, {
       label: `impl:${area.key}`,
       phase: 'Implement',
-      isolation: 'worktree',
       schema: IMPL_SCHEMA,
     }).then((r) => ({ area, impl: r })),
   ({ area, impl }) => {
@@ -226,7 +226,7 @@ const results = await pipeline(
     if (!impl || !review) return { area, impl, review, fixed: null };
     const must = (review.issues || []).filter((i) => i.severity === 'blocker' || i.severity === 'major');
     if (must.length === 0) return { area, impl, review, fixed: { summary: 'no blocker/major', applied: [] } };
-    return agent(`${COMMON}\n\nあなたは修正担当です。担当 ${area.label} の worktree で、以下の blocker/major の指摘を直してください。各修正に再発防止のテストを足す。誤った指摘は not_verified に「不採用: 理由」。直したら worktree で npm run typecheck と npm run unit を流し、通ったことを確認。
+    return agent(`${COMMON}\n\nあなたは修正担当です。担当 ${area.label} の所有ファイル（DESIGN.md §4）で、以下の blocker/major の指摘を直してください。各修正に再発防止のテストを足す。誤った指摘は not_verified に「不採用: 理由」。直したら型検査（2 つの tsconfig、自分のファイルにエラーが無いこと）と \`npx vitest run tests/<自分のprefix>\` を流して通ったことを確認。git add/commit/build はしない。
 指摘:\n${JSON.stringify(must, null, 1).slice(0, 4000)}`, {
       label: `fix:${area.key}`,
       phase: 'Fix',

@@ -1,0 +1,78 @@
+/* Issue + log views. Owner: renderer-issue. Colours/sizes via tokens only. */
+
+.issue-counter {
+  display: inline-flex;
+  align-items: baseline;
+  gap: var(--space-2);
+}
+.issue-counter-num {
+  font-size: var(--fs-display);
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  color: var(--accent-text);
+}
+
+.issue-big-icon {
+  color: var(--text-dim);
+}
+.big-status[data-tone='ok'] .issue-big-icon {
+  color: var(--ok);
+}
+.big-status[data-tone='danger'] .issue-big-icon {
+  color: var(--danger);
+}
+.big-status[data-tone='warn'] .issue-big-icon {
+  color: var(--warn);
+}
+.big-status[data-tone='accent'] .issue-big-icon {
+  color: var(--accent);
+}
+
+.issue-status-sub {
+  color: var(--text-dim);
+  font-size: var(--fs-md);
+}
+
+/* preview + log tables scroll inside their card */
+.issue-table-wrap {
+  max-height: 340px;
+  overflow: auto;
+}
+.issue-seq {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+}
+
+.issue-keylist {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.issue-values {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-1) var(--space-3);
+}
+.issue-values-pair {
+  font-size: var(--fs-small);
+}
+.issue-values-key {
+  color: var(--text-dim);
+  margin-right: var(--space-1);
+}
+
+.issue-next-values {
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  gap: var(--space-1) var(--space-4);
+  margin-top: var(--space-2);
+}
+.issue-next-values dt {
+  color: var(--text-dim);
+  font-size: var(--fs-small);
+}
+.issue-next-values dd {
+  margin: 0;
+  font-family: var(--font-mono);
+}

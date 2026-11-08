@@ -1,8 +1,215 @@
-// Dictionary for feature "hex". Owner: agent renderer-hex.
+// Dictionary for feature "hex" (binary editor). Owner: agent renderer-hex.
 // Keys must start with "hex." and be added to BOTH ja and en (compile-checked).
 import { defineMessages } from './define';
 
 export default defineMessages({
-  ja: {},
-  en: {},
+  ja: {
+    'hex.title': 'バイナリ編集',
+    'hex.subtitle': 'ページ／ブロック単位でメモリを直接編集します',
+
+    // empty / entry
+    'hex.empty.title': '編集するタグがありません',
+    'hex.empty.desc': 'タグを読み取るか、ダンプファイルを開くか、空のタグを新規作成してください。',
+    'hex.new': '空のタグを新規作成',
+    'hex.chooseKind': 'タグの種類',
+    'hex.open': 'ファイルを開く',
+    'hex.read': 'タグを読み取る',
+    'hex.openError': 'ファイルを読み込めませんでした',
+
+    // uid / duplication note (I1/I2)
+    'hex.uidNote': 'UID（製造番号）は製造時に固定され、書き換えできません。複製できるのはデータ領域だけで、UID は複製されません。',
+    'hex.readonly': '読み取り専用',
+    'hex.protected': '保護',
+    'hex.trailer': 'トレーラ（鍵）',
+
+    // region labels
+    'hex.region.uid': 'UID・静的ロック（読み取り専用）',
+    'hex.region.manufacturer': '製造者ブロック・UID（読み取り専用）',
+    'hex.region.cc': 'CC（容量情報・OTP）',
+    'hex.region.user': 'ユーザーデータ／NDEF',
+    'hex.region.data': 'データブロック',
+    'hex.region.dynlock': 'ダイナミックロック',
+    'hex.region.config': '設定（CFG0／CFG1）',
+    'hex.region.password': 'パスワード（PWD／PACK）',
+    'hex.region.trailer': 'セクタトレーラ（鍵・アクセス条件）',
+
+    // grid
+    'hex.col.offset': '位置',
+    'hex.col.ascii': 'ASCII',
+    'hex.cursor': 'カーソル',
+    'hex.selection': '{n} バイト選択',
+    'hex.editMode': '入力モード',
+    'hex.mode.hex': '16 進',
+    'hex.mode.ascii': 'ASCII',
+    'hex.forbiddenEdit': 'この単位は読み取り専用です（編集できません）',
+
+    // increment toolbar
+    'hex.inc.title': 'インクリメント（連番・数値編集）',
+    'hex.inc.hint': '選択したバイト範囲を符号なし整数として扱い、増減・開始値のセットができます。',
+    'hex.inc.width': '幅',
+    'hex.inc.widthBytes': '{n} バイト',
+    'hex.inc.endian': 'バイト順',
+    'hex.inc.be': 'ビッグエンディアン',
+    'hex.inc.le': 'リトルエンディアン',
+    'hex.inc.value': '現在値',
+    'hex.inc.plus': '+1',
+    'hex.inc.minus': '−1',
+    'hex.inc.step': '増分',
+    'hex.inc.add': '加算',
+    'hex.inc.setTo': '値をセット',
+    'hex.inc.set': 'セット',
+    'hex.inc.forbidden': 'UID など読み取り専用の領域は数値編集できません',
+    'hex.inc.badNumber': '数値を入力してください',
+
+    // find / replace
+    'hex.find.title': '検索・置換',
+    'hex.find.pattern': '検索するバイト列',
+    'hex.find.replaceWith': '置換後のバイト列',
+    'hex.find.prev': '前へ',
+    'hex.find.next': '次へ',
+    'hex.find.count': '{n} 件',
+    'hex.find.none': '見つかりませんでした',
+    'hex.find.replaceAll': 'すべて置換',
+    'hex.find.replaced': '{n} 件を置換しました',
+    'hex.find.invalid': '検索パターンを読み取れません',
+    'hex.find.lengthMismatch': '置換前と置換後のバイト数は同じにしてください',
+
+    // fill
+    'hex.fill.title': '塗りつぶし',
+    'hex.fill.hint': '選択範囲を指定したバイトで埋めます（読み取り専用の単位は変更しません）。',
+    'hex.fill.custom': '任意の値',
+    'hex.fill.apply': '塗りつぶす',
+
+    // clipboard
+    'hex.copy': 'コピー',
+    'hex.paste': '貼り付け',
+    'hex.copied': '{n} バイトをコピーしました',
+    'hex.pasteEmpty': 'コピーされたバイトがありません',
+
+    // undo/redo
+    'hex.undo': '元に戻す',
+    'hex.redo': 'やり直す',
+
+    // actions / write
+    'hex.revert': '読み取り値に戻す',
+    'hex.reread': '再読み取り',
+    'hex.write': 'タグに書き込む',
+    'hex.write.title': '変更をタグに書き込みます',
+    'hex.write.message': '編集した単位だけを書き込みます。UID と製造ブロックは書き込みません。',
+    'hex.write.units': '書き込む単位: {n}',
+    'hex.write.protectedUnits': '保護単位: {n}（確認のうえ書き込みます）',
+    'hex.write.forbiddenExcluded': '読み取り専用の単位は除外しました: {n}',
+    'hex.write.includeProtected': '保護領域（CC・ロック・設定・トレーラ）も書き込む',
+    // I5: word typed to confirm an irreversible protection write (lock / CC / CFG / PWD / トレーラ).
+    'hex.write.lockWord': 'ロック',
+    'hex.write.nothing': '書き込む変更はありません',
+    'hex.write.needCard': 'タグをリーダーに置いてください',
+    'hex.write.kindMismatch': 'リーダーのタグ（{reader}）と編集中のタグ（{doc}）の種類が違います',
+
+    // status
+    'hex.changed': '{n} 単位を変更',
+    'hex.clean': '変更なし',
+    'hex.source.card': 'タグから読み取り',
+    'hex.source.file': 'ファイル: {name}',
+    'hex.source.new': '新規（空のタグ）',
+  },
+  en: {
+    'hex.title': 'Binary editor',
+    'hex.subtitle': 'Edit memory directly, page / block at a time',
+
+    'hex.empty.title': 'No tag to edit',
+    'hex.empty.desc': 'Read a tag, open a dump file, or create a new blank tag.',
+    'hex.new': 'New blank tag',
+    'hex.chooseKind': 'Tag type',
+    'hex.open': 'Open file',
+    'hex.read': 'Read tag',
+    'hex.openError': 'Could not load the file',
+
+    'hex.uidNote': 'The UID (serial number) is fixed at manufacture and cannot be changed. Only the data area is duplicated - the UID is never copied.',
+    'hex.readonly': 'Read-only',
+    'hex.protected': 'Protected',
+    'hex.trailer': 'Trailer (keys)',
+
+    'hex.region.uid': 'UID & static lock (read-only)',
+    'hex.region.manufacturer': 'Manufacturer block & UID (read-only)',
+    'hex.region.cc': 'CC (capability / OTP)',
+    'hex.region.user': 'User data / NDEF',
+    'hex.region.data': 'Data blocks',
+    'hex.region.dynlock': 'Dynamic lock',
+    'hex.region.config': 'Config (CFG0 / CFG1)',
+    'hex.region.password': 'Password (PWD / PACK)',
+    'hex.region.trailer': 'Sector trailer (keys / access)',
+
+    'hex.col.offset': 'Addr',
+    'hex.col.ascii': 'ASCII',
+    'hex.cursor': 'Cursor',
+    'hex.selection': '{n} bytes selected',
+    'hex.editMode': 'Input mode',
+    'hex.mode.hex': 'Hex',
+    'hex.mode.ascii': 'ASCII',
+    'hex.forbiddenEdit': 'This unit is read-only (cannot be edited)',
+
+    'hex.inc.title': 'Increment (sequence / numeric edit)',
+    'hex.inc.hint': 'Treat the selected byte range as an unsigned integer to add, subtract or set a start value.',
+    'hex.inc.width': 'Width',
+    'hex.inc.widthBytes': '{n} bytes',
+    'hex.inc.endian': 'Byte order',
+    'hex.inc.be': 'Big-endian',
+    'hex.inc.le': 'Little-endian',
+    'hex.inc.value': 'Current value',
+    'hex.inc.plus': '+1',
+    'hex.inc.minus': '-1',
+    'hex.inc.step': 'Step',
+    'hex.inc.add': 'Add',
+    'hex.inc.setTo': 'Set value',
+    'hex.inc.set': 'Set',
+    'hex.inc.forbidden': 'Read-only areas such as the UID cannot be edited numerically',
+    'hex.inc.badNumber': 'Enter a number',
+
+    'hex.find.title': 'Find & replace',
+    'hex.find.pattern': 'Bytes to find',
+    'hex.find.replaceWith': 'Replace with',
+    'hex.find.prev': 'Previous',
+    'hex.find.next': 'Next',
+    'hex.find.count': '{n} matches',
+    'hex.find.none': 'No matches',
+    'hex.find.replaceAll': 'Replace all',
+    'hex.find.replaced': 'Replaced {n}',
+    'hex.find.invalid': 'Cannot read the search pattern',
+    'hex.find.lengthMismatch': 'Find and replacement must be the same number of bytes',
+
+    'hex.fill.title': 'Fill',
+    'hex.fill.hint': 'Fill the selection with a byte (read-only units are left unchanged).',
+    'hex.fill.custom': 'Custom',
+    'hex.fill.apply': 'Fill',
+
+    'hex.copy': 'Copy',
+    'hex.paste': 'Paste',
+    'hex.copied': 'Copied {n} bytes',
+    'hex.pasteEmpty': 'Nothing copied yet',
+
+    'hex.undo': 'Undo',
+    'hex.redo': 'Redo',
+
+    'hex.revert': 'Revert to read value',
+    'hex.reread': 'Re-read',
+    'hex.write': 'Write to tag',
+    'hex.write.title': 'Write changes to the tag',
+    'hex.write.message': 'Only the edited units are written. The UID and manufacturer block are never written.',
+    'hex.write.units': 'Units to write: {n}',
+    'hex.write.protectedUnits': 'Protected units: {n} (written after confirmation)',
+    'hex.write.forbiddenExcluded': 'Read-only units excluded: {n}',
+    'hex.write.includeProtected': 'Also write protected areas (CC / lock / config / trailer)',
+    // I5: word typed to confirm an irreversible protection write (lock / CC / CFG / PWD / trailer).
+    'hex.write.lockWord': 'LOCK',
+    'hex.write.nothing': 'No changes to write',
+    'hex.write.needCard': 'Place a tag on the reader',
+    'hex.write.kindMismatch': 'The tag on the reader ({reader}) differs from the edited tag ({doc})',
+
+    'hex.changed': '{n} units changed',
+    'hex.clean': 'No changes',
+    'hex.source.card': 'Read from tag',
+    'hex.source.file': 'File: {name}',
+    'hex.source.new': 'New (blank tag)',
+  },
 });

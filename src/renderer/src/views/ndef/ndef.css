@@ -1,0 +1,207 @@
+/* NDEF editor + view styles. Owner: agent renderer-ndef.
+   Tokens only (src/renderer/src/styles/tokens.css); no raw hex. */
+
+.ndef-records {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+.ndef-record {
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+}
+.ndef-record-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+  padding: var(--space-2) var(--space-3);
+  border-bottom: 1px solid var(--border);
+  background: var(--surface-raised);
+  border-radius: var(--radius) var(--radius) 0 0;
+}
+.ndef-record-title {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-width: 0;
+  font-weight: 650;
+}
+.ndef-record-index {
+  display: inline-grid;
+  place-items: center;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: var(--accent-soft);
+  color: var(--accent-text);
+  font-size: var(--fs-micro);
+  font-weight: 700;
+  flex: none;
+}
+.ndef-record-desc {
+  color: var(--text-dim);
+  font-size: var(--fs-small);
+  font-weight: 400;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.ndef-record-body {
+  padding: var(--space-3);
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--space-3);
+}
+.ndef-record-body .span-2 {
+  grid-column: 1 / -1;
+}
+@media (max-width: 720px) {
+  .ndef-record-body {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .ndef-record-body .span-2 {
+    grid-column: auto;
+  }
+}
+
+/* add menu (dropdown) */
+.ndef-add {
+  position: relative;
+  display: inline-block;
+}
+.ndef-menu-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 40;
+}
+.ndef-menu {
+  position: absolute;
+  z-index: 41;
+  top: calc(100% + 4px);
+  left: 0;
+  min-width: 220px;
+  padding: var(--space-1);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-2);
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  max-height: 360px;
+  overflow: auto;
+}
+.ndef-menu-item {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  width: 100%;
+  padding: var(--space-2) var(--space-2);
+  border: none;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text);
+  font-weight: 600;
+  text-align: left;
+  cursor: pointer;
+}
+.ndef-menu-item:hover,
+.ndef-menu-item:focus-visible {
+  background: var(--hover-veil);
+}
+.ndef-menu-item > svg {
+  color: var(--accent-text);
+  flex: none;
+}
+
+/* capacity meter */
+.ndef-meter {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.ndef-meter-row {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-2);
+  font-size: var(--fs-small);
+  color: var(--text-dim);
+}
+.ndef-meter-track {
+  height: 8px;
+  border-radius: var(--radius-pill);
+  background: var(--surface-inset);
+  border: 1px solid var(--border);
+  overflow: hidden;
+}
+.ndef-meter-fill {
+  height: 100%;
+  background: var(--accent-solid);
+  transition: width var(--dur);
+}
+.ndef-meter-fill[data-over='true'] {
+  background: var(--danger-solid);
+}
+
+/* placeholder panel */
+.ndef-ph {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  align-items: center;
+}
+.ndef-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  height: var(--control-h-sm);
+  padding: 0 var(--space-2);
+  border-radius: var(--radius-pill);
+  border: 1px solid var(--border-strong);
+  background: var(--surface);
+  color: var(--text);
+  font-size: var(--fs-small);
+  font-weight: 600;
+  cursor: pointer;
+}
+.ndef-chip:hover {
+  background: var(--accent-soft);
+  border-color: transparent;
+  color: var(--accent-text);
+}
+.ndef-chip code {
+  font-size: var(--fs-micro);
+  color: var(--text-dim);
+}
+
+/* preview */
+.ndef-preview {
+  margin: 0;
+  padding: var(--space-3);
+  border-radius: var(--radius);
+  background: var(--surface-inset);
+  border: 1px solid var(--border);
+  font-family: var(--font-mono);
+  font-size: var(--fs-small);
+  line-height: 1.7;
+  white-space: pre-wrap;
+  word-break: break-all;
+  max-height: 220px;
+  overflow: auto;
+}
+
+/* sticky footer actions */
+.ndef-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: var(--space-2);
+  flex-wrap: wrap;
+}
+.ndef-actions .grow {
+  flex: 1 1 auto;
+}

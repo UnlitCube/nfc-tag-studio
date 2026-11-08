@@ -1,0 +1,265 @@
+/* Binary (hex) editor styles. Owner: agent renderer-hex.
+   Colours and sizes come only from tokens (styles/tokens.css) - no raw hex. */
+
+.hx-editor {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+/* ---------- region legend ---------- */
+.hx-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2) var(--space-3);
+  align-items: center;
+  font-size: var(--fs-small);
+  color: var(--text-dim);
+}
+.hx-legend-item {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+}
+.hx-swatch {
+  width: 14px;
+  height: 14px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border-strong);
+  flex: 0 0 auto;
+}
+.hx-swatch.region-uid,
+.hx-swatch.region-manufacturer {
+  background: var(--region-uid);
+}
+.hx-swatch.region-cc {
+  background: var(--region-cc);
+}
+.hx-swatch.region-user,
+.hx-swatch.region-data {
+  background: var(--region-user);
+}
+.hx-swatch.region-dynlock {
+  background: var(--region-dynlock);
+}
+.hx-swatch.region-config {
+  background: var(--region-config);
+}
+.hx-swatch.region-password {
+  background: var(--region-password);
+}
+.hx-swatch.region-trailer {
+  background: var(--region-trailer);
+}
+.hx-danger {
+  color: var(--danger);
+}
+
+/* ---------- grid ---------- */
+.hx-grid {
+  overflow: auto;
+  max-height: 56vh;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+  font-family: var(--font-mono);
+  font-size: var(--fs-small);
+  line-height: 1.5;
+}
+.hx-row {
+  display: flex;
+  align-items: stretch;
+  border-bottom: 1px solid var(--border);
+}
+.hx-row:last-child {
+  border-bottom: 0;
+}
+.hx-addr {
+  flex: 0 0 auto;
+  width: 8.5ch;
+  padding: 3px var(--space-2);
+  color: var(--text-dim);
+  background: var(--surface-inset);
+  border-right: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  user-select: none;
+  position: sticky;
+  left: 0;
+  z-index: 1;
+}
+.hx-lock {
+  color: var(--text-faint);
+  display: inline-flex;
+}
+.hx-row.forbidden .hx-lock {
+  color: var(--danger);
+}
+.hx-row.protected .hx-lock {
+  color: var(--warn);
+}
+.hx-cells {
+  display: flex;
+  flex-wrap: nowrap;
+}
+.hx-ascii {
+  display: flex;
+  flex-wrap: nowrap;
+  border-left: 1px solid var(--border);
+  padding: 0 var(--space-1);
+}
+.hx-spacer {
+  flex: 1 1 auto;
+  min-width: var(--space-3);
+}
+.hx-cell {
+  width: 2.6ch;
+  text-align: center;
+  padding: 3px 0;
+  cursor: text;
+  color: var(--text);
+}
+.hx-achar {
+  width: 1.3ch;
+  text-align: center;
+  padding: 3px 0;
+  cursor: text;
+  color: var(--text-dim);
+}
+
+/* region tints (row background; cells override for changed/cursor/selection) */
+.hx-row.region-uid,
+.hx-row.region-manufacturer {
+  background: var(--region-uid);
+}
+.hx-row.region-cc {
+  background: var(--region-cc);
+}
+.hx-row.region-user,
+.hx-row.region-data {
+  background: var(--region-user);
+}
+.hx-row.region-dynlock {
+  background: var(--region-dynlock);
+}
+.hx-row.region-config {
+  background: var(--region-config);
+}
+.hx-row.region-password {
+  background: var(--region-password);
+}
+.hx-row.region-trailer {
+  background: var(--region-trailer);
+}
+
+/* unread / denied unit */
+.hx-row.denied .hx-cell,
+.hx-row.denied .hx-achar {
+  color: var(--hex-denied-fg);
+  font-style: italic;
+}
+
+/* forbidden unit: not editable */
+.hx-row.forbidden .hx-cell,
+.hx-row.forbidden .hx-achar {
+  cursor: not-allowed;
+}
+
+/* changed bytes */
+.hx-cell.changed {
+  background: var(--hex-changed-bg);
+  color: var(--hex-changed-fg);
+  font-weight: 600;
+  border-radius: var(--radius-sm);
+}
+.hx-achar.changed {
+  color: var(--hex-changed-fg);
+  font-weight: 600;
+}
+
+/* selection */
+.hx-cell.sel,
+.hx-achar.sel {
+  background: var(--hex-selection);
+}
+
+/* cursor */
+.hx-cell.cursor,
+.hx-achar.cursor {
+  box-shadow: inset 0 0 0 2px var(--hex-cursor);
+  border-radius: var(--radius-sm);
+}
+
+.hx-grid:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+}
+
+/* ---------- increment toolbar (prominent) ---------- */
+.hx-inc {
+  border: 1px solid var(--accent);
+  background: var(--accent-soft);
+  border-radius: var(--radius);
+  padding: var(--space-3);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+.hx-inc-head {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  color: var(--accent-text);
+  font-weight: 600;
+}
+.hx-inc-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: var(--space-2) var(--space-3);
+}
+.hx-inc-value {
+  font-family: var(--font-mono);
+  font-size: var(--fs-md);
+  color: var(--text);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 2px var(--space-2);
+  min-width: 10ch;
+}
+.hx-inc .input {
+  width: 12ch;
+}
+.hx-inline-label {
+  font-size: var(--fs-small);
+  color: var(--text-dim);
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+/* ---------- toolbars ---------- */
+.hx-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
+}
+.hx-toolbar .grow {
+  min-width: var(--space-4);
+}
+.hx-status {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2) var(--space-4);
+  align-items: center;
+  font-size: var(--fs-small);
+  color: var(--text-dim);
+}
+.hx-panelgrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: var(--space-3);
+}
