@@ -1,0 +1,86 @@
+/* Help view layout. Owner: agent "shell-ui". Tokens only. */
+.help-layout {
+  display: grid;
+  grid-template-columns: 220px minmax(0, 1fr);
+  gap: var(--space-6);
+  align-items: start;
+}
+@media (max-width: 900px) {
+  .help-layout {
+    grid-template-columns: 1fr;
+  }
+  .help-toc {
+    position: static !important;
+  }
+}
+.help-toc {
+  position: sticky;
+  top: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.help-toc-title {
+  font-size: var(--fs-micro);
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  color: var(--text-dim);
+  padding: 0 var(--space-2) var(--space-1);
+}
+.help-toc-item {
+  text-align: left;
+  border: none;
+  background: transparent;
+  color: var(--text-dim);
+  padding: 6px var(--space-2);
+  border-radius: var(--radius);
+  cursor: pointer;
+  border-left: 2px solid transparent;
+}
+.help-toc-item:hover {
+  background: var(--hover-veil);
+  color: var(--text);
+}
+.help-toc-item[aria-current='true'] {
+  color: var(--accent-text);
+  border-left-color: var(--accent);
+  background: var(--accent-soft);
+}
+.help-content {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-6);
+  max-width: 760px;
+}
+.help-section {
+  scroll-margin-top: var(--space-4);
+}
+.help-h2 {
+  font-size: var(--fs-title);
+  font-weight: 700;
+  padding-bottom: var(--space-2);
+  border-bottom: 1px solid var(--border);
+  margin-bottom: var(--space-3);
+}
+.help-h3 {
+  font-size: var(--fs-md);
+  font-weight: 650;
+  margin-top: var(--space-2);
+}
+.help-block {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  margin-bottom: var(--space-3);
+}
+.help-block p {
+  line-height: 1.7;
+}
+.help-list {
+  margin: 0;
+  padding-left: 1.3em;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  line-height: 1.6;
+}

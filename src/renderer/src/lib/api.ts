@@ -34,7 +34,23 @@ function makeApi(bridge: BridgeApi): NfcApi {
   return api as unknown as NfcApi;
 }
 
-export const api: NfcApi = makeApi(window.nfcBridge);
+// Lazy: window.nfcBridge is resolved on first use, not at module load, so the
+// renderer modules stay importable in a node test environment (where there is no
+// window). Accessing a method before the preload loaded throws a clear error.
+let resolved: NfcApi | null = null;
+function real(): NfcApi {
+  if (!resolved) {
+    const bridge = typeof window !== 'undefined' ? window.nfcBridge : undefined;
+    resolved = makeApi(bridge as BridgeApi);
+  }
+  return resolved;
+}
+
+export const api: NfcApi = new Proxy({} as NfcApi, {
+  get(_t, prop: string) {
+    return (real() as unknown as Record<string, unknown>)[prop];
+  },
+}) as NfcApi;
 
 export { AppError };
 
