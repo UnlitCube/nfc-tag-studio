@@ -6,7 +6,14 @@ import { join } from 'node:path';
 import { startServices, stopServices } from './app';
 
 // --- packaged builds refuse remote debugging (must run before ready) ------------
-if (app.isPackaged && process.argv.some((a) => a.startsWith('--remote-debugging-port') || a.startsWith('--inspect'))) {
+// A distributed build never exposes a debugging port. The only exception is the
+// packaged-app E2E canary, which must set NFCTS_E2E=1 explicitly (never set in a
+// real distribution), so we can confirm a packaged build renders and loads koffi.
+if (
+  app.isPackaged &&
+  process.env.NFCTS_E2E !== '1' &&
+  process.argv.some((a) => a.startsWith('--remote-debugging-port') || a.startsWith('--inspect'))
+) {
   app.exit(1);
 }
 
