@@ -1,0 +1,205 @@
+/* NFC Tag Studio design tokens. CONTRACT FILE - names frozen.
+   Family A (business desktop): light body + dark chrome, plus dark theme.
+   Theme: <html data-theme="light|dark"> (set before first paint, see index.html).
+   Rules:
+   - Every colour / size in view CSS goes through these variables. No raw hex in views.
+   - Text colours (--text*, --accent-text, --ok, --warn, --danger, --info) are for
+     foreground on --surface / --bg / *-soft. Fills with white text use *-solid.
+   - Brand = teal (distinct from sibling apps' blue). Status colours: 1 colour = 1 meaning:
+       ok = success/written, warn = caution/irreversible-soon, danger = error/irreversible,
+       info = neutral notice, accent = brand/selection/primary action.
+   - Contrast targets: body text 4.5:1 (AA), non-text UI 3:1. Values are checked by
+     tests/contrast.test.ts - change a value there first when you change it here. */
+
+:root {
+  /* ---------- surfaces ---------- */
+  --bg: #f3f5f7;
+  --surface: #ffffff;
+  --surface-raised: #fbfcfd;
+  --surface-inset: #eef1f4;
+  --border: #d9dee4;
+  --border-strong: #b8c0ca;
+  /* input borders: 3:1 against --surface */
+  --border-input: #858f9c;
+
+  /* ---------- text ---------- */
+  --text: #17212b;
+  --text-dim: #4f5d6d;
+  /* --text-faint: decoration / placeholders only (AA borderline) */
+  --text-faint: #697586;
+  --on-solid: #ffffff;
+
+  /* ---------- brand (teal) ---------- */
+  --accent: #0b7285;
+  --accent-hover: #095c6b;
+  --accent-soft: #e3f4f6;
+  --accent-text: #08606f;
+  --accent-solid: #0b7285;
+  --accent-solid-hover: #095c6b;
+
+  /* ---------- status: foreground / soft surface / solid fill ---------- */
+  --ok: #17702f;
+  --ok-soft: #e6f4ea;
+  --ok-solid: #1a7f37;
+  --warn: #8f4b00;
+  --warn-soft: #fdf3e5;
+  --warn-solid: #a85600;
+  --danger: #b42318;
+  --danger-soft: #fdecec;
+  --danger-solid: #c0392b;
+  --danger-solid-hover: #a8301f;
+  --info: #1d5fbf;
+  --info-soft: #e8f0fc;
+  --info-solid: #1f6feb;
+
+  /* ---------- chrome (dark in both themes) ---------- */
+  --nav-bg: #15202b;
+  --nav-text: #c3cdd8;
+  --nav-text-active: #ffffff;
+  --nav-text-faint: #8f9bab;
+  --nav-active-bg: #233243;
+  --nav-hover-bg: rgba(255, 255, 255, 0.06);
+  --nav-accent: #3bc9db;
+  --nav-border: rgba(255, 255, 255, 0.08);
+  --statusbar-bg: #15202b;
+  --statusbar-fg: #b9c4d0;
+  --ok-on-dark: #4ac26b;
+  --warn-on-dark: #e0a84a;
+  --danger-on-dark: #f0705f;
+  --toast-bg: #1b2734;
+  --toast-fg: #ffffff;
+  --toast-border: rgba(255, 255, 255, 0.1);
+
+  /* ---------- hex editor regions (cell backgrounds; text stays --text) ---------- */
+  --region-uid: #eceff3;
+  --region-cc: #f3ecfb;
+  --region-user: #ffffff;
+  --region-dynlock: #fdf0e3;
+  --region-config: #fff7dd;
+  --region-password: #fde9ea;
+  --region-trailer: #fde9ea;
+  --region-manufacturer: #eceff3;
+  --region-data: #ffffff;
+  --hex-changed-bg: #d7f3e1;
+  --hex-changed-fg: #0f5c27;
+  --hex-denied-fg: #9aa4b0;
+  --hex-cursor: #0b7285;
+  --hex-selection: rgba(11, 114, 133, 0.18);
+
+  /* ---------- misc ---------- */
+  --hover-veil: rgba(16, 30, 54, 0.06);
+  --backdrop: rgba(12, 18, 26, 0.5);
+
+  /* ---------- typography ---------- */
+  --font-ui: 'Yu Gothic UI', 'Meiryo UI', Meiryo, 'Segoe UI', system-ui, -apple-system, 'Hiragino Sans', sans-serif;
+  --font-mono: 'Cascadia Mono', Consolas, 'SF Mono', Menlo, 'MS Gothic', monospace;
+  --fs-micro: 11px;
+  --fs-small: 12px;
+  --fs-base: 13px;
+  --fs-md: 14px;
+  --fs-heading: 16px;
+  --fs-title: 20px;
+  --fs-display: 28px;
+
+  /* ---------- sizes ---------- */
+  --radius-sm: 4px;
+  --radius: 6px;
+  --radius-lg: 10px;
+  --radius-pill: 999px;
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 24px;
+  --space-8: 32px;
+  --control-h-sm: 26px;
+  --control-h: 32px;
+  --control-h-lg: 40px;
+  --nav-width: 216px;
+  --statusbar-h: 28px;
+  --content-max: 1180px;
+  --shadow-1: 0 1px 3px rgba(16, 30, 54, 0.08), 0 1px 2px rgba(16, 30, 54, 0.04);
+  --shadow-2: 0 8px 28px rgba(16, 30, 54, 0.18);
+
+  /* ---------- focus ---------- */
+  --focus-ring: 0 0 0 2px var(--surface), 0 0 0 4px var(--accent);
+
+  /* ---------- motion ---------- */
+  --dur-fast: 120ms;
+  --dur: 180ms;
+
+  color-scheme: light;
+}
+
+:root[data-theme='dark'] {
+  --bg: #0e1318;
+  --surface: #151b22;
+  --surface-raised: #1a212a;
+  --surface-inset: #1f2832;
+  --border: #2b3540;
+  --border-strong: #42505f;
+  --border-input: #66768a;
+
+  --text: #e3eaf2;
+  --text-dim: #a0adbb;
+  --text-faint: #8593a3;
+  --on-solid: #ffffff;
+
+  --accent: #3bc9db;
+  --accent-hover: #66d9e8;
+  --accent-soft: #0f3036;
+  --accent-text: #66d9e8;
+  --accent-solid: #0b7285;
+  --accent-solid-hover: #0c8599;
+
+  --ok: #4ac26b;
+  --ok-soft: #13301e;
+  --ok-solid: #1a7f37;
+  --warn: #e0a84a;
+  --warn-soft: #33270f;
+  --warn-solid: #a85600;
+  --danger: #f0705f;
+  --danger-soft: #3b1f1c;
+  --danger-solid: #c0392b;
+  --danger-solid-hover: #d14b3c;
+  --info: #79b0ff;
+  --info-soft: #14284a;
+  --info-solid: #1f6feb;
+
+  --nav-bg: #0b1015;
+  --nav-text: #aeb9c6;
+  --nav-text-faint: #7d8898;
+  --nav-active-bg: #1b2631;
+  --statusbar-bg: #0b1015;
+  --statusbar-fg: #9aa7b5;
+
+  --region-uid: #1e252e;
+  --region-cc: #261f33;
+  --region-user: #151b22;
+  --region-dynlock: #33261a;
+  --region-config: #322c14;
+  --region-password: #3a1f22;
+  --region-trailer: #3a1f22;
+  --region-manufacturer: #1e252e;
+  --region-data: #151b22;
+  --hex-changed-bg: #15412a;
+  --hex-changed-fg: #8ee6a8;
+  --hex-denied-fg: #5c6876;
+  --hex-cursor: #3bc9db;
+  --hex-selection: rgba(59, 201, 219, 0.22);
+
+  --hover-veil: rgba(255, 255, 255, 0.05);
+  --backdrop: rgba(0, 0, 0, 0.6);
+  --shadow-1: 0 1px 3px rgba(0, 0, 0, 0.4);
+  --shadow-2: 0 10px 32px rgba(0, 0, 0, 0.55);
+
+  color-scheme: dark;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :root {
+    --dur-fast: 0ms;
+    --dur: 0ms;
+  }
+}

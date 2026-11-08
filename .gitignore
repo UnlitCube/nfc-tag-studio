@@ -1,0 +1,20 @@
+node_modules/
+out/
+dist/
+release/
+*.log
+
+# Local machine state / secrets (never commit)
+*.local.json
+.env.local
+.env.*.local
+
+# NFC project artifacts a user might drop in the repo while testing
+/scratch/
+/samples-local/
+
+# OS / editor
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/

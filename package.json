@@ -1,0 +1,48 @@
+{
+  "name": "nfc-tag-studio",
+  "productName": "NFC Tag Studio",
+  "version": "0.1.0",
+  "description": "NFC Tag Studio - desktop authoring & provisioning tool for NFC tags you own and manage (NTAG213/215/216, MIFARE Classic with your own keys).",
+  "author": "UnlitCube",
+  "license": "MIT",
+  "private": true,
+  "main": "out/main/index.js",
+  "engines": {
+    "node": ">=22.12.0"
+  },
+  "scripts": {
+    "dev": "electron-vite dev",
+    "build": "electron-vite build",
+    "preview": "electron-vite preview",
+    "postinstall": "node scripts/ensure-electron.cjs",
+    "typecheck:node": "tsc -p tsconfig.node.json --noEmit",
+    "typecheck:web": "tsc -p tsconfig.json --noEmit",
+    "typecheck": "npm run typecheck:node && npm run typecheck:web",
+    "unit": "vitest run",
+    "unit:watch": "vitest",
+    "e2e": "npm run build && playwright test",
+    "test": "npm run typecheck && npm run unit",
+    "dist:win": "npm run build && electron-builder --win --config electron-builder.json",
+    "dist:dir": "npm run build && electron-builder --dir --config electron-builder.json"
+  },
+  "dependencies": {
+    "koffi": "^3.3.7"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.65.0",
+    "@types/node": "^24.19.0",
+    "@types/react": "^19.2.0",
+    "@types/react-dom": "^19.2.0",
+    "@vitejs/plugin-react": "^6.2.1",
+    "electron": "^44.10.2",
+    "electron-builder": "^26.18.0",
+    "electron-vite": "^6.0.0",
+    "lucide-react": "^1.70.0",
+    "react": "^19.2.0",
+    "react-dom": "^19.2.0",
+    "typescript": "^5.9.3",
+    "vite": "^8.3.6",
+    "vitest": "^5.1.0",
+    "zustand": "^5.0.8"
+  }
+}
