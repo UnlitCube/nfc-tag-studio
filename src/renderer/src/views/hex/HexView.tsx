@@ -11,6 +11,7 @@ import {
   Binary,
   ClipboardPaste,
   Copy,
+  Eraser,
   FilePlus2,
   FolderOpen,
   Hash,
@@ -28,7 +29,7 @@ import {
   Upload,
 } from 'lucide-react';
 import type { TagKind } from '@shared/tags';
-import { TAG_KINDS, isForbiddenUnit, isMifare, isProtectedUnit, specFor } from '@shared/tags';
+import { TAG_KINDS, isForbiddenUnit, isMifare, isNtag, isProtectedUnit, mifareDataBlocks, specFor } from '@shared/tags';
 import { blankImage, importDump, planWrites } from '@shared/tag';
 import { FILE_FILTERS } from '@shared/api';
 import type { WriteRequest } from '@shared/types';
@@ -167,6 +168,7 @@ function HexEditor() {
   const lang = useAppStore((s) => s.settings.language);
   const toast = useAppStore((s) => s.toast);
   const toastError = useAppStore((s) => s.toastError);
+  const confirm = useAppStore((s) => s.confirm);
   const takeHandoff = useAppStore((s) => s.takeHandoff);
 
   const kind = doc.image.kind;
@@ -385,6 +387,33 @@ function HexEditor() {
   };
 
   const onRevert = () => applyEdit(new Uint8Array(original));
+
+  // Initialize / format: clear the DATA area to a blank state, keeping the UID,
+  // CC and config/password pages. NTAG -> empty NDEF TLV (03 00 FE) + zeros;
+  // MIFARE -> all data blocks zeroed (block 0 and sector trailers untouched).
+  // Produces pending edits the operator reviews, then writes with "write to tag".
+  const onInitialize = async () => {
+    const ok = await confirm({
+      title: t('hex.init.title'),
+      message: t('hex.init.body'),
+      details: [t('hex.init.keepsUid')],
+      tone: 'warn',
+      confirmLabel: t('hex.init.confirm'),
+    });
+    if (!ok) return;
+    const next = new Uint8Array(data);
+    if (isNtag(kind)) {
+      const us = spec.userStartUnit * unitSize;
+      for (let i = us; i < us + spec.userBytes; i++) next[i] = 0;
+      next[us] = 0x03;
+      next[us + 1] = 0x00;
+      next[us + 2] = 0xfe;
+    } else {
+      for (const blk of mifareDataBlocks(kind)) for (let i = 0; i < unitSize; i++) next[blk * unitSize + i] = 0;
+    }
+    applyEdit(next);
+    toast({ tone: 'ok', title: t('hex.init.done'), detail: t('hex.init.doneHint') });
+  };
 
   const onWrite = async () => {
     const card = reader?.card ?? null;
@@ -729,6 +758,9 @@ function HexEditor() {
         </Button>
         <span className="grow" />
         {advanced ? <Switch checked={includeProtected} onChange={setIncludeProtected} label={t('hex.write.includeProtected')} /> : null}
+        <Button size="sm" icon={Eraser} onClick={() => void onInitialize()}>
+          {t('hex.init.title')}
+        </Button>
         <Button size="sm" variant="ghost" onClick={onRevert} disabled={changedCount === 0}>
           {t('hex.revert')}
         </Button>
