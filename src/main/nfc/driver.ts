@@ -34,9 +34,15 @@ import {
 // ACR122U / Touchatag and other PN532-based readers.
 const ACR122_NAME = /(ACR122|ACR1222|ACM122|PN53[0-9]|Touchatag|Tikitag)/i;
 // Readers whose firmware exposes a PC/SC transparent session (or an equivalent
-// escape) for raw NFC-A: ACR1252/1255/1281/1552/1555, Identiv/SCM, Sony, HID.
+// escape) for raw NFC-A: ACR1252/1255/1281/1552/1555, Identiv/SCM, HID.
+// NOTE: the Sony PaSoRi (RC-S3xx / "Sony FeliCa Port") is NOT here. Measured
+// 2026-11-09 on a PaSoRi 3.0: it accepts storage-card commands (FF CA get UID,
+// FF B0 read binary with Le=0x10, FF D6 update binary) but rejects both the
+// ACR122 "Direct Transmit" wrap and the FF C2 transparent wrap for raw NTAG
+// commands (GET_VERSION -> 6A 81). So Sony readers resolve to 'storage', where
+// NTAG kind is identified from the CC (page 3) rather than GET_VERSION.
 const TRANSPARENT_NAME =
-  /(ACR1251|ACR1252|ACR1255|ACR1256|ACR1281|ACR1283|ACR1552|ACR1555|Identiv|SCM\s*Micro|SCL01|SCL3711|uTrust\s*3[57]|CLOUD\s*2700|OMNIKEY.*(5022|5x22|5427|CL)|Sony|RC-S3|PaSoRi|FeliCa|SpringCard|Duali|Elatec|TWN4)/i;
+  /(ACR1251|ACR1252|ACR1255|ACR1256|ACR1281|ACR1283|ACR1552|ACR1555|Identiv|SCM\s*Micro|SCL01|SCL3711|uTrust\s*3[57]|CLOUD\s*2700|OMNIKEY.*(5022|5x22|5427|CL)|SpringCard|Duali|Elatec|TWN4)/i;
 
 /** Pick a driver from the reader name alone (used when driverMode = 'auto'). */
 export function estimateDriver(readerName: string): ResolvedDriver {
@@ -147,8 +153,15 @@ export class ReaderIo {
   }
 
   async readBinary(block: number, length: number): Promise<Uint8Array> {
-    const { data, sw } = splitResponse(await this.conn.transmit(apduReadBinary(block, length)));
-    if (isSuccessSw(sw)) return data;
+    let { data, sw } = splitResponse(await this.conn.transmit(apduReadBinary(block, length)));
+    // 6C XX = wrong Le; the reader wants exactly XX bytes. Some readers (e.g. the
+    // Sony PaSoRi RC-S3xx) only accept a 16-byte FF B0 read and reject a 4-byte
+    // page read with 6C 10. Re-issue with the reader-suggested Le, then slice back
+    // to the requested length. (Measured 2026-11-09 on a PaSoRi 3.0 + NTAG215.)
+    if (sw.sw1 === 0x6c && sw.sw2 !== 0x00) {
+      ({ data, sw } = splitResponse(await this.conn.transmit(apduReadBinary(block, sw.sw2))));
+    }
+    if (isSuccessSw(sw)) return data.length > length ? data.subarray(0, length) : data;
     if (swMeansDenied(sw)) throw new OpError('ACCESS_DENIED', `block ${block}`);
     throw new OpError('READ_FAILED', `block ${block}`);
   }

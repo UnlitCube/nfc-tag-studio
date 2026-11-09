@@ -10,11 +10,16 @@ describe('driver estimation from reader name', () => {
     expect(estimateDriver('Touchatag USB Reader')).toBe('acr122');
   });
 
-  it('maps ACR1252/1255, Identiv and Sony readers to transparent', () => {
+  it('maps ACR1252/1255 and Identiv readers to transparent', () => {
     expect(estimateDriver('ACS ACR1252 1S CL Reader PICC 0')).toBe('transparent');
     expect(estimateDriver('ACS ACR1255U-J1 PICC Reader')).toBe('transparent');
     expect(estimateDriver('Identiv uTrust 3700 F CL Reader')).toBe('transparent');
-    expect(estimateDriver('Sony FeliCa Port/PaSoRi 3.0')).toBe('transparent');
+  });
+
+  it('maps the Sony PaSoRi to storage (raw commands unsupported; measured 2026-11-09)', () => {
+    // A PaSoRi 3.0 rejects both the ACR122 and the transparent raw wrap for NTAG
+    // commands but accepts storage-card commands. Kind is identified from the CC.
+    expect(estimateDriver('Sony FeliCa Port/PaSoRi 3.0 0')).toBe('storage');
   });
 
   it('falls back to storage for unknown readers', () => {

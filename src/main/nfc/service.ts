@@ -115,8 +115,15 @@ export function createNfcService(deps: NfcServiceDeps): NfcService {
 
   function activeReaderName(): string | null {
     if (selectedReader) return selectedReader;
+    // Auto-selection. When the virtual reader is explicitly enabled AND has a tag
+    // on it, prefer it even if a real reader is also connected: the operator
+    // turned the simulator on to use it (and it keeps demos/tests deterministic
+    // regardless of what hardware happens to be plugged in). To use a real reader
+    // instead, select it explicitly.
+    const simReader = sim.readers()[0];
+    if (simReader && simReader.cardPresent) return simReader.name;
     const readers = allReaders();
-    // auto: prefer a contactless reader that already has a card.
+    // else prefer a real contactless reader that already has a card.
     const withCard = readers.find((r) => r.likelyContactless && r.cardPresent);
     if (withCard) return withCard.name;
     const contactless = readers.find((r) => r.likelyContactless);
