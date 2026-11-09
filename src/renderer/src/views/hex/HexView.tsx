@@ -183,6 +183,10 @@ function HexEditor() {
   const [pending, setPending] = useState<{ index: number; high: number } | null>(null);
   const [clip, setClip] = useState<Uint8Array | null>(null);
   const [includeProtected, setIncludeProtected] = useState(false);
+  // Bytes shown per grid row (a multiple of the unit size). Default 16 so a tall
+  // 4-byte-per-page NTAG dump fits in far fewer rows.
+  const rowByteOptions = unitSize >= 16 ? [16, 32, 48] : [4, 8, 16, 32];
+  const [bytesPerRow, setBytesPerRow] = useState<number>(16);
 
   const [searchMode, setSearchMode] = useState<ByteMode>('hex');
   const [findText, setFindText] = useState('');
@@ -509,20 +513,35 @@ function HexEditor() {
         ? t('hex.source.file', { name: doc.source.name })
         : t('hex.source.new');
 
+  // Rows hold `bytesPerRow` bytes and may span several pages/blocks (so a tall
+  // 4-byte-per-page NTAG dump can be shown 8/16/32 bytes per row). Region colour,
+  // lock state and read status are per CELL (per its unit); a thin divider marks
+  // each page/block boundary inside a row.
+  const unitWord = spec.unit === 'page' ? t('hex.unit.page') : t('hex.unit.block');
   const rows = [];
-  for (let u = 0; u < spec.unitCount; u++) {
-    const off = u * unitSize;
-    const forbidden = isForbiddenUnit(kind, u);
-    const prot = !forbidden && isProtectedUnit(kind, u);
-    const status = doc.image.unitStatus[u];
-    const denied = status === 'denied' || status === 'unread' || status === 'error';
-    const rkey = regionKey(kind, u);
-    const rowTitle = `${t(regionLabel(rkey))}${forbidden ? ` · ${t('hex.readonly')}` : prot ? ` · ${t('hex.protected')}` : ''}`;
+  for (let rowStart = 0; rowStart < total; rowStart += bytesPerRow) {
+    const rowEnd = Math.min(rowStart + bytesPerRow, total);
+    const firstUnit = unitOfByte(kind, rowStart);
+    const lastUnit = unitOfByte(kind, rowEnd - 1);
+    let anyForbidden = false;
+    let anyProtected = false;
+    for (let u = firstUnit; u <= lastUnit; u++) {
+      if (isForbiddenUnit(kind, u)) anyForbidden = true;
+      else if (isProtectedUnit(kind, u)) anyProtected = true;
+    }
+    const addrLabel = firstUnit === lastUnit ? String(firstUnit) : `${firstUnit}–${lastUnit}`;
+    const rowTitle = `${unitWord} ${addrLabel}`;
 
     const hexCells = [];
     const asciiCells = [];
-    for (let i = 0; i < unitSize; i++) {
-      const bi = off + i;
+    for (let bi = rowStart; bi < rowEnd; bi++) {
+      const u = unitOfByte(kind, bi);
+      const forbidden = isForbiddenUnit(kind, u);
+      const prot = !forbidden && isProtectedUnit(kind, u);
+      const status = doc.image.unitStatus[u];
+      const denied = status === 'denied' || status === 'unread' || status === 'error';
+      const rkey = regionKey(kind, u);
+      const unitStart = bi % unitSize === 0 && bi !== rowStart;
       const sel = bi >= lo && bi <= hi;
       const isCursor = bi === cursor;
       const b = data[bi];
@@ -534,14 +553,19 @@ function HexEditor() {
           ref={isCursor ? cursorRef : undefined}
           className={cx(
             'hx-cell',
+            `region-${rkey}`,
+            forbidden && 'forbidden',
+            prot && 'protected',
+            denied && 'denied',
             changed[bi] && 'changed',
             sel && 'sel',
             isCursor && 'cursor',
             st?.boundary && 'hx-bound',
             st?.inNdef && 'hx-ndef',
             st?.terminator && 'hx-term',
+            unitStart && 'hx-unitstart',
           )}
-          title={st?.label ?? undefined}
+          title={st?.label ?? rowTitle}
           onMouseDown={(e) => onCellDown(bi, e)}
         >
           {toHex2(b)}
@@ -550,7 +574,15 @@ function HexEditor() {
       asciiCells.push(
         <span
           key={bi}
-          className={cx('hx-achar', changed[bi] && 'changed', sel && 'sel', isCursor && 'cursor')}
+          className={cx(
+            'hx-achar',
+            `region-${rkey}`,
+            denied && 'denied',
+            changed[bi] && 'changed',
+            sel && 'sel',
+            isCursor && 'cursor',
+            unitStart && 'hx-unitstart',
+          )}
           onMouseDown={(e) => onCellDown(bi, e)}
         >
           {ch}
@@ -559,18 +591,18 @@ function HexEditor() {
     }
 
     rows.push(
-      <div key={u} className={cx('hx-row', `region-${rkey}`, forbidden && 'forbidden', prot && 'protected', denied && 'denied')}>
+      <div key={rowStart} className="hx-row">
         <span className="hx-addr" title={rowTitle}>
-          {forbidden ? (
-            <span className="hx-lock">
+          {anyForbidden ? (
+            <span className="hx-lock hx-lock-forbidden">
               <Lock size={12} aria-hidden />
             </span>
-          ) : prot ? (
-            <span className="hx-lock">
+          ) : anyProtected ? (
+            <span className="hx-lock hx-lock-protected">
               <ShieldAlert size={12} aria-hidden />
             </span>
           ) : null}
-          <span>{u}</span>
+          <span>{addrLabel}</span>
         </span>
         <span className="hx-cells">{hexCells}</span>
         <span className="hx-spacer" />
@@ -678,6 +710,15 @@ function HexEditor() {
               { value: 'hex', label: t('hex.mode.hex') },
               { value: 'ascii', label: t('hex.mode.ascii') },
             ]}
+          />
+        </label>
+        <label className="hx-inline-label">
+          {t('hex.bytesPerRow')}
+          <Segmented
+            ariaLabel={t('hex.bytesPerRow')}
+            value={String(bytesPerRow)}
+            onChange={(v) => setBytesPerRow(Number(v))}
+            options={rowByteOptions.map((n) => ({ value: String(n), label: String(n) }))}
           />
         </label>
         <Button size="sm" icon={Copy} onClick={doCopy}>

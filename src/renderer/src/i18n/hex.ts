@@ -109,6 +109,9 @@ export default defineMessages({
     // status
     'hex.changed': '{n} 単位を変更',
     'hex.clean': '変更なし',
+    'hex.bytesPerRow': '1行のバイト数',
+    'hex.unit.page': 'ページ',
+    'hex.unit.block': 'ブロック',
     'hex.inspect.title': 'バイトの意味',
     'hex.inspect.plain': 'この領域は自由なデータです。特別な意味を持つビットはありません。',
     'hex.inspect.goto': 'この領域へ移動',
@@ -215,6 +218,9 @@ export default defineMessages({
 
     'hex.changed': '{n} units changed',
     'hex.clean': 'No changes',
+    'hex.bytesPerRow': 'Bytes per row',
+    'hex.unit.page': 'page',
+    'hex.unit.block': 'block',
     'hex.inspect.title': 'Byte meaning',
     'hex.inspect.plain': 'This area is free data. No bits have a special meaning here.',
     'hex.inspect.goto': 'Jump to this area',

@@ -93,10 +93,10 @@
   color: var(--text-faint);
   display: inline-flex;
 }
-.hx-row.forbidden .hx-lock {
+.hx-lock-forbidden {
   color: var(--danger);
 }
-.hx-row.protected .hx-lock {
+.hx-lock-protected {
   color: var(--warn);
 }
 .hx-cells {
@@ -127,9 +127,12 @@
   cursor: text;
   color: var(--text-dim);
 }
-/* every 4th byte gets a little more space, so pages/quads are easy to scan */
-.hx-cell:nth-child(4n + 1):not(:first-child) {
+/* a page/block boundary inside a row: thin divider + a little breathing room */
+.hx-cell.hx-unitstart,
+.hx-achar.hx-unitstart {
   margin-left: 0.6ch;
+  border-left: 1px solid var(--border-strong);
+  padding-left: 0.4ch;
 }
 
 /* region tints (row background; cells override for changed/cursor/selection) */
@@ -417,4 +420,44 @@
 }
 .span-prop .hx-struct-swatch {
   background: var(--text-dim);
+}
+
+/* ---------- per-cell region tint (rows can span pages/blocks) ---------- */
+/* :not() guards so changed / selection / cursor styling always wins */
+.hx-cell.region-uid:not(.changed):not(.sel):not(.cursor),
+.hx-cell.region-manufacturer:not(.changed):not(.sel):not(.cursor),
+.hx-achar.region-uid:not(.changed):not(.sel):not(.cursor),
+.hx-achar.region-manufacturer:not(.changed):not(.sel):not(.cursor) {
+  background: var(--region-uid);
+}
+.hx-cell.region-cc:not(.changed):not(.sel):not(.cursor),
+.hx-achar.region-cc:not(.changed):not(.sel):not(.cursor) {
+  background: var(--region-cc);
+}
+.hx-cell.region-dynlock:not(.changed):not(.sel):not(.cursor),
+.hx-achar.region-dynlock:not(.changed):not(.sel):not(.cursor) {
+  background: var(--region-dynlock);
+}
+.hx-cell.region-config:not(.changed):not(.sel):not(.cursor),
+.hx-achar.region-config:not(.changed):not(.sel):not(.cursor) {
+  background: var(--region-config);
+}
+.hx-cell.region-password:not(.changed):not(.sel):not(.cursor),
+.hx-achar.region-password:not(.changed):not(.sel):not(.cursor) {
+  background: var(--region-password);
+}
+/* MIFARE sector trailers (region 'data' but flagged via protected) */
+.hx-cell.protected.region-data:not(.changed):not(.sel):not(.cursor),
+.hx-achar.protected.region-data:not(.changed):not(.sel):not(.cursor) {
+  background: var(--region-trailer);
+}
+
+/* read status + forbidden, now per cell */
+.hx-cell.denied,
+.hx-achar.denied {
+  color: var(--hex-denied-fg);
+  font-style: italic;
+}
+.hx-cell.forbidden {
+  cursor: not-allowed;
 }
