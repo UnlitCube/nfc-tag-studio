@@ -58,13 +58,13 @@
 /* ---------- grid ---------- */
 .hx-grid {
   overflow: auto;
-  max-height: 56vh;
+  max-height: 64vh;
   border: 1px solid var(--border);
   border-radius: var(--radius);
   background: var(--surface);
   font-family: var(--font-mono);
-  font-size: var(--fs-small);
-  line-height: 1.5;
+  font-size: var(--fs-md);
+  line-height: 1.6;
 }
 .hx-row {
   display: flex;
@@ -76,8 +76,8 @@
 }
 .hx-addr {
   flex: 0 0 auto;
-  width: 8.5ch;
-  padding: 3px var(--space-2);
+  width: 7ch;
+  padding: 6px var(--space-2);
   color: var(--text-dim);
   background: var(--surface-inset);
   border-right: 1px solid var(--border);
@@ -114,18 +114,22 @@
   min-width: var(--space-3);
 }
 .hx-cell {
-  width: 2.6ch;
+  width: 3ch;
   text-align: center;
-  padding: 3px 0;
+  padding: 6px 1px;
   cursor: text;
   color: var(--text);
 }
 .hx-achar {
-  width: 1.3ch;
+  width: 1.5ch;
   text-align: center;
-  padding: 3px 0;
+  padding: 6px 0;
   cursor: text;
   color: var(--text-dim);
+}
+/* every 4th byte gets a little more space, so pages/quads are easy to scan */
+.hx-cell:nth-child(4n + 1):not(:first-child) {
+  margin-left: 0.6ch;
 }
 
 /* region tints (row background; cells override for changed/cursor/selection) */
@@ -262,4 +266,155 @@
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
   gap: var(--space-3);
+}
+
+/* ---------- data-structure boundaries (NDEF / TLV) on the grid ---------- */
+/* a structure section starts at this byte: vertical bar on its left edge */
+.hx-cell.hx-bound {
+  box-shadow: inset 2px 0 0 var(--accent);
+}
+/* bytes that make up the NDEF message payload: underline band */
+.hx-cell.hx-ndef {
+  border-bottom: 2px solid var(--accent);
+}
+.hx-cell.hx-ndef.hx-bound {
+  box-shadow: inset 2px 0 0 var(--accent);
+}
+/* the terminator TLV byte */
+.hx-cell.hx-term {
+  border-bottom: 2px solid var(--warn);
+}
+/* the cursor still wins visually */
+.hx-cell.cursor {
+  box-shadow: inset 0 0 0 2px var(--hex-cursor);
+}
+
+/* ---------- inspector panel ---------- */
+.hx-ins-head {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+.hx-ins-group {
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  overflow: hidden;
+}
+.hx-ins-grouphead {
+  width: 100%;
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-2);
+  padding: var(--space-2) var(--space-3);
+  background: var(--surface-inset);
+  border: none;
+  border-bottom: 1px solid var(--border);
+  font-weight: 650;
+  cursor: pointer;
+  text-align: left;
+  color: var(--text);
+}
+.hx-ins-grouphead:hover {
+  color: var(--accent-text);
+}
+.hx-ins-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: var(--fs-small);
+}
+.hx-ins-table td {
+  padding: 5px var(--space-2);
+  border-bottom: 1px solid var(--border);
+  vertical-align: top;
+}
+.hx-ins-table tr:last-child td {
+  border-bottom: 0;
+}
+.hx-ins-bits {
+  white-space: nowrap;
+  color: var(--text-dim);
+  width: 1%;
+}
+.hx-ins-name {
+  white-space: nowrap;
+  font-weight: 600;
+}
+.hx-ins-val {
+  white-space: nowrap;
+  color: var(--accent-text);
+}
+.hx-ins-mean {
+  color: var(--text-dim);
+  line-height: 1.45;
+}
+.hx-dot {
+  display: inline-block;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  margin-right: 6px;
+  vertical-align: middle;
+}
+.hx-dot.tone-info {
+  background: var(--info);
+}
+.hx-dot.tone-ok {
+  background: var(--ok);
+}
+.hx-dot.tone-warn {
+  background: var(--warn);
+}
+.hx-dot.tone-danger {
+  background: var(--danger);
+}
+
+/* ---------- structure list ---------- */
+.hx-struct-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.hx-struct-item {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: 6px var(--space-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  cursor: pointer;
+  text-align: left;
+  color: var(--text);
+}
+.hx-struct-item:hover {
+  background: var(--hover-veil);
+}
+.hx-struct-swatch {
+  width: 10px;
+  height: 10px;
+  border-radius: 3px;
+  flex: 0 0 auto;
+  background: var(--border-strong);
+}
+.span-ndef .hx-struct-swatch,
+.span-ndefval .hx-struct-swatch {
+  background: var(--accent);
+}
+.span-term .hx-struct-swatch {
+  background: var(--warn);
+}
+.span-lock .hx-struct-swatch,
+.span-mem .hx-struct-swatch {
+  background: var(--info);
+}
+.span-null .hx-struct-swatch {
+  background: var(--border-strong);
+}
+.span-prop .hx-struct-swatch {
+  background: var(--text-dim);
 }

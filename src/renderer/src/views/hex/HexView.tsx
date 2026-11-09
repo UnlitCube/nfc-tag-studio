@@ -61,6 +61,8 @@ import {
   writeUint,
 } from './model';
 import type { ByteMode, Endian } from './model';
+import { perByteStructure } from './inspect';
+import { UnitInspector } from './UnitInspector';
 import './hex.css';
 
 const cx = (...c: (string | false | null | undefined)[]): string => c.filter(Boolean).join(' ');
@@ -162,6 +164,7 @@ function HexEditor() {
   const canRedo = useAppStore((s) => s.future.length > 0);
   const reader = useAppStore((s) => s.reader);
   const advanced = useAppStore((s) => s.settings.advancedMode);
+  const lang = useAppStore((s) => s.settings.language);
   const toast = useAppStore((s) => s.toast);
   const toastError = useAppStore((s) => s.toastError);
   const takeHandoff = useAppStore((s) => s.takeHandoff);
@@ -218,6 +221,8 @@ function HexEditor() {
 
   const changed = useMemo(() => changedMask(data, original), [data, original]);
   const changedCount = useMemo(() => changedUnitCount(kind, data, original), [kind, data, original]);
+  // Data-structure boundaries (NDEF / TLV spans) for the grid and the inspector.
+  const struct = useMemo(() => perByteStructure(kind, data, lang), [kind, data, lang]);
 
   const { lo, hi } = selectionBounds(anchor, cursor);
   const selLen = hi - lo + 1;
@@ -521,12 +526,22 @@ function HexEditor() {
       const sel = bi >= lo && bi <= hi;
       const isCursor = bi === cursor;
       const b = data[bi];
+      const st = struct[bi];
       const ch = b >= 0x20 && b < 0x7f ? String.fromCharCode(b) : '.';
       hexCells.push(
         <span
           key={bi}
           ref={isCursor ? cursorRef : undefined}
-          className={cx('hx-cell', changed[bi] && 'changed', sel && 'sel', isCursor && 'cursor')}
+          className={cx(
+            'hx-cell',
+            changed[bi] && 'changed',
+            sel && 'sel',
+            isCursor && 'cursor',
+            st?.boundary && 'hx-bound',
+            st?.inNdef && 'hx-ndef',
+            st?.terminator && 'hx-term',
+          )}
+          title={st?.label ?? undefined}
           onMouseDown={(e) => onCellDown(bi, e)}
         >
           {toHex2(b)}
@@ -707,6 +722,20 @@ function HexEditor() {
           <span>{changedCount > 0 ? t('hex.changed', { n: changedCount }) : t('hex.clean')}</span>
         </div>
       </div>
+
+      {/* Byte/bit inspector + data-structure (NDEF/TLV) boundaries for the current unit. */}
+      <UnitInspector
+        kind={kind}
+        data={data}
+        unit={unitOfByte(kind, cursor)}
+        onGoto={(byte) => {
+          const c = clamp(byte);
+          setCursor(c);
+          setAnchor(c);
+          setPending(null);
+          gridRef.current?.focus();
+        }}
+      />
 
       <div className="hx-panelgrid">
         <Card
