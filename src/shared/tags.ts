@@ -7,16 +7,16 @@
 //   operator owns/manages. It never claims to change a UID. MIFARE Classic
 //   sectors are opened only with keys the operator holds; no key recovery.
 
-export type TagKind = 'NTAG213' | 'NTAG215' | 'NTAG216' | 'MIFARE_CLASSIC_1K' | 'MIFARE_CLASSIC_4K';
-export type TagFamily = 'NTAG' | 'MIFARE_CLASSIC';
+export type TagKind = 'NTAG213' | 'NTAG215' | 'NTAG216' | 'MIFARE_CLASSIC_1K' | 'MIFARE_CLASSIC_4K' | 'FELICA_LITE_S';
+export type TagFamily = 'NTAG' | 'MIFARE_CLASSIC' | 'FELICA_LITE';
 
 export interface PageRegion {
-  /** First page (NTAG) or block (MIFARE) index, inclusive. */
+  /** First page (NTAG) / block (MIFARE/FeliCa) UNIT index, inclusive. */
   start: number;
   /** Last index, inclusive. */
   end: number;
   /** Region id, used by the UI for colour + i18n. */
-  id: 'uid' | 'cc' | 'user' | 'dynlock' | 'config' | 'password' | 'manufacturer' | 'data';
+  id: 'uid' | 'cc' | 'user' | 'dynlock' | 'config' | 'password' | 'manufacturer' | 'data' | 'reg' | 'mc' | 'system';
   label: string;
   /** Operators normally should not overwrite this region by hand. */
   protected: boolean;
@@ -29,7 +29,7 @@ export interface TagSpec {
   displayName: string;
   /** Logical unit the memory is addressed in. */
   unit: 'page' | 'block';
-  /** Bytes per addressable unit (NTAG page = 4, MIFARE block = 16). */
+  /** Bytes per addressable unit (NTAG page = 4, MIFARE/FeliCa block = 16). */
   unitSize: number;
   /** Total number of addressable units (incl. header/config). */
   unitCount: number;
@@ -40,6 +40,12 @@ export interface TagSpec {
   regions: PageRegion[];
   uidBytes: number;
   summary: string;
+  /**
+   * FeliCa only: maps a contiguous UNIT index (0..unitCount-1) to the real,
+   * non-contiguous FeliCa block number (e.g. unit 15 -> block 0x88 MC). Absent
+   * for NTAG/MIFARE, where the block number equals the unit index.
+   */
+  blockMap?: readonly number[];
 }
 
 // --- NTAG21x -----------------------------------------------------------------
@@ -131,12 +137,48 @@ function mifare(kind: 'MIFARE_CLASSIC_1K' | 'MIFARE_CLASSIC_4K', blocks: number)
   };
 }
 
+// --- FeliCa Lite-S (Sony RC-S966) --------------------------------------------
+// Block = 16 bytes, addressed by non-contiguous block numbers. The editable grid
+// holds the 14 user blocks (S_PAD0..S_PAD13 = 0x00..0x0D), the REG register block
+// (0x0E) and the MC memory-configuration block (0x88); blockMap maps the unit
+// index to the real block number. IDm (8 bytes) is the read-only manufacture id.
+// Read-only system blocks (ID 0x82, SYS_C 0x85, CKV 0x86 ...) are shown in the
+// card info / inspector, not in the editable grid.
+export const FELICA_LITE_S_BLOCK_MAP: readonly number[] = [
+  0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09, 0x0a, 0x0b, 0x0c, 0x0d, 0x0e, 0x88,
+];
+export const FELICA_LITE_S_SYSTEM_CODE = 0x88b4;
+/** FeliCa block numbers of read-only system blocks we read for display (not in the grid). */
+export const FELICA_LITE_S_INFO_BLOCKS = { id: 0x82, serC: 0x84, sysC: 0x85, ckv: 0x86, wcnt: 0x90, state: 0x92 } as const;
+
+function felicaLiteS(): TagSpec {
+  return {
+    kind: 'FELICA_LITE_S',
+    family: 'FELICA_LITE',
+    displayName: 'FeliCa Lite-S',
+    unit: 'block',
+    unitSize: 16,
+    unitCount: FELICA_LITE_S_BLOCK_MAP.length,
+    userBytes: 14 * 16,
+    userStartUnit: 0,
+    uidBytes: 8,
+    blockMap: FELICA_LITE_S_BLOCK_MAP,
+    summary: '224 バイトのユーザー領域（S_PAD0〜13）。RC-S966。暗号認証（鍵）には非対応。',
+    regions: [
+      { start: 0, end: 13, id: 'user', label: 'ユーザーデータ（S_PAD0〜13）', protected: false },
+      { start: 14, end: 14, id: 'reg', label: 'REG（レジスタ 0x0E）', protected: false, note: '認証・カウンタ運用のレジスタ。通常のデータ用途では未使用。' },
+      { start: 15, end: 15, id: 'mc', label: 'MC（メモリ構成・フラグ 0x88）', protected: true, note: '各ブロックの読み書き可否や動作モード。設定を誤るとブロックが恒久的に読み取り専用になります。' },
+    ],
+  };
+}
+
 export const TAG_SPECS: Record<TagKind, TagSpec> = {
   NTAG213: ntag('NTAG213', 45, 144),
   NTAG215: ntag('NTAG215', 135, 504),
   NTAG216: ntag('NTAG216', 231, 888),
   MIFARE_CLASSIC_1K: mifare('MIFARE_CLASSIC_1K', 64),
   MIFARE_CLASSIC_4K: mifare('MIFARE_CLASSIC_4K', 256),
+  FELICA_LITE_S: felicaLiteS(),
 };
 
 export const TAG_KINDS = Object.keys(TAG_SPECS) as TagKind[];
@@ -151,6 +193,16 @@ export function isNtag(kind: TagKind): kind is 'NTAG213' | 'NTAG215' | 'NTAG216'
 
 export function isMifare(kind: TagKind): kind is 'MIFARE_CLASSIC_1K' | 'MIFARE_CLASSIC_4K' {
   return TAG_SPECS[kind].family === 'MIFARE_CLASSIC';
+}
+
+export function isFelica(kind: TagKind): kind is 'FELICA_LITE_S' {
+  return TAG_SPECS[kind].family === 'FELICA_LITE';
+}
+
+/** Real FeliCa block number for a grid unit index (identity for non-FeliCa). */
+export function felicaBlockOfUnit(kind: TagKind, unit: number): number {
+  const map = specFor(kind).blockMap;
+  return map ? (map[unit] ?? unit) : unit;
 }
 
 /** Total image size (all addressable units) in bytes. */
@@ -297,10 +349,12 @@ export function parseStorageAtr(atr: Uint8Array): { standard: number; cardName: 
   return null;
 }
 
-/** Card-family hint from the ATR. 'TYPE2' = Ultralight/NTAG family (exact model via GET_VERSION / CC). */
-export function kindHintFromAtr(atr: Uint8Array): 'MIFARE_CLASSIC_1K' | 'MIFARE_CLASSIC_4K' | 'TYPE2' | null {
+/** Card-family hint from the ATR. 'TYPE2' = Ultralight/NTAG family, 'FELICA' = FeliCa. */
+export function kindHintFromAtr(atr: Uint8Array): 'MIFARE_CLASSIC_1K' | 'MIFARE_CLASSIC_4K' | 'TYPE2' | 'FELICA' | null {
   const p = parseStorageAtr(atr);
   if (!p) return null;
+  // PC/SC Part 3 "standard" byte 0x11 = FeliCa.
+  if (p.standard === 0x11) return 'FELICA';
   switch (p.cardName) {
     case 0x0001:
       return 'MIFARE_CLASSIC_1K';
@@ -311,6 +365,19 @@ export function kindHintFromAtr(atr: Uint8Array): 'MIFARE_CLASSIC_1K' | 'MIFARE_
     default:
       return null;
   }
+}
+
+/** FeliCa system code -> kind. 0x88B4 is FeliCa Lite / Lite-S. */
+export function kindFromFelicaSystemCode(systemCode: number): TagKind | null {
+  return systemCode === FELICA_LITE_S_SYSTEM_CODE ? 'FELICA_LITE_S' : null;
+}
+
+/**
+ * Tell Lite-S from Lite by the MC block: on Lite-S, MC[2] (SYS_OP) bit0 = 1.
+ * Returns true when the MC indicates Lite-S. (Both share system code 0x88B4.)
+ */
+export function felicaIsLiteS(mcBlock: Uint8Array): boolean {
+  return mcBlock.length >= 3 && (mcBlock[2] & 0x01) === 0x01;
 }
 
 // --- factory images (simulator + "new document") --------------------------------
@@ -331,6 +398,16 @@ export function ntagBcc(uid: Uint8Array): [number, number] {
 export function factoryImage(kind: TagKind, uid: Uint8Array): Uint8Array {
   const spec = specFor(kind);
   const data = new Uint8Array(spec.unitCount * spec.unitSize);
+  if (isFelica(kind)) {
+    // FeliCa Lite-S: user blocks (0x00..0x0D) and REG (0x0E) zeroed; MC (0x88) at
+    // factory default. MC[0]/MC[1] = per-block write-permission bitmap (0xFF = all
+    // writable), MC[2] bit0 = SYS_OP (1 = Lite-S). ndef_en byte left 0.
+    const mcOff = 15 * 16; // last unit = MC
+    data[mcOff + 0] = 0xff; // blocks 0x00-0x07 writable
+    data[mcOff + 1] = 0xff; // blocks 0x08-0x0E writable
+    data[mcOff + 2] = 0x01; // SYS_OP = Lite-S
+    return data;
+  }
   if (isNtag(kind)) {
     if (uid.length !== 7) throw new Error('NTAG UID must be 7 bytes');
     const [bcc0, bcc1] = ntagBcc(uid);
@@ -365,6 +442,7 @@ export function factoryImage(kind: TagKind, uid: Uint8Array): Uint8Array {
  * bytes, which counts as protected (see isProtectedUnit).
  */
 export function isForbiddenUnit(kind: TagKind, unit: number): boolean {
+  if (isFelica(kind)) return false; // no UID/manufacturer block in the editable grid
   if (isNtag(kind)) return unit <= 1;
   return unit === 0;
 }
@@ -375,6 +453,7 @@ export function isForbiddenUnit(kind: TagKind, unit: number): boolean {
  */
 export function isProtectedUnit(kind: TagKind, unit: number): boolean {
   if (isForbiddenUnit(kind, unit)) return true;
+  if (isFelica(kind)) return unit === 15; // MC (0x88) only
   if (isNtag(kind)) {
     const p = ntagPages(kind);
     return unit <= 3 || unit > p.userLast;

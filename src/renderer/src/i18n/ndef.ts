@@ -9,6 +9,8 @@ export default defineMessages({
     'ndef.title': 'NDEF 編集',
     'ndef.subtitle': 'タグに書き込む NDEF メッセージを組み立てます',
     'ndef.uidNote': 'UID（製造番号）は製造時に固定され、書き換えも複製もできません。コピーできるのはデータ領域（NDEF）の中身だけです。',
+    'ndef.felicaTitle': 'FeliCa Lite-S は NDEF 編集に未対応です',
+    'ndef.felicaBody': 'FeliCa Lite-S の NDEF は MC の設定を伴う別方式のため、この NDEF エディタ（NTAG／MIFARE 用）では扱いません。ブロックの読み書きは「バイナリ編集」をご利用ください。',
 
     'ndef.source': 'データ元',
     'ndef.source.card': '現在のタグ',
@@ -159,6 +161,8 @@ export default defineMessages({
     'ndef.subtitle': 'Compose the NDEF message to write to a tag',
     'ndef.uidNote':
       'The UID (serial number) is fixed at manufacture and cannot be changed or copied. Only the contents of the data area (NDEF) can be copied.',
+    'ndef.felicaTitle': 'NDEF editing is not supported for FeliCa Lite-S',
+    'ndef.felicaBody': 'FeliCa Lite-S uses a different NDEF mapping (tied to the MC block), so this NDEF editor (for NTAG / MIFARE) does not handle it. Use the binary editor to read and write its blocks.',
 
     'ndef.source': 'Source',
     'ndef.source.card': 'Current tag',

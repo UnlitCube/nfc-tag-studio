@@ -116,6 +116,8 @@ export interface TagImage {
   readAt: number;
   ntag?: NtagExtras;
   mifare?: { sectors: MifareSectorAccess[] };
+  /** FeliCa Lite-S read-only system blocks (hex), for display. */
+  felica?: { id: string | null; sysC: string | null; ckv: string | null };
 }
 
 // ---------------------------------------------------------------------------

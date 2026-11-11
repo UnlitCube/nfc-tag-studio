@@ -40,3 +40,19 @@
 - **storage 方式では種別を CC（page 3）から判定**（GET_VERSION が使えない）。`identifyWith` は version→CC→ATR の順でフォールバック。NTAG215 の CC は `E1 10 3E 00`（size 0x3E）。
 - **仮想リーダーの自動選択**: 実機リーダーが接続されていると `activeReaderName` が実機を優先し、シミュレータのテストが実機のカードを読んで落ちる（環境依存の flake）。→ 仮想リーダーが「有効 かつ タグ在り」のとき自動選択で優先する（実機を使うときは明示選択）。これでハードの有無に関係なくテストが決定的。
 - 実測: PaSoRi 経由で本物の NTAG215 を 135 ページ全て読み取り成功（denied 0）、UID `04:15:91:DA:99:AE:20`。書き込みは実機で未実施（ユーザーの実物タグのため）。
+
+## FeliCa Lite-S（2026-11-11 追加）
+
+- `FELICA_LITE_S` を TagKind に追加。非連続ブロック（0x00-0x0E・0x88）を `TagSpec.blockMap` で連続 unit にマップ。編集グリッド = user 0x00-0x0D + REG 0x0E + MC 0x88（16 ユニット）。IDm（8 バイト）は読み取り専用。
+- 転送は `ReaderIo.raw`（ACR122 の InCommunicateThru / transparent）経由。**Sony PaSoRi は storage ドライバで生 FeliCa コマンドを出せない**ため、PaSoRi でのブロック読み書きは `UNSUPPORTED_TAG`（識別は FF CA の IDm で可能）。FeliCa の実機読み書きは ACR122 系が必要・未検証。
+- 純粋ロジックは `src/shared/felica.ts`（Polling/Read/Write Without Encryption の組み立て・MC デコード）。MC[0]/MC[1] = ブロック別 書き込み可否ビットマップ、MC[2] bit0 = SYS_OP（Lite-S）。
+- 仮想リーダーが FeliCa をエミュレート（`simulator.ts` の `felicaCommand`）。読み取り・編集・MC フラグ編集を実機なしで検証済み。
+
+## パラメータ（フラグ）編集（2026-11-11 追加）
+
+- `src/renderer/src/views/hex/FlagEditor.tsx`。設定を解説付き UI で編集し、共有のエンコーダ（`buildNtagConfigWrites`・`buildTrailer`・`encodeFelicaMc`）で保留中の編集に変換。取り消せない操作（CFGLCK・恒久ロック・MIFARE 読み取り専用・FeliCa 読み取り専用）は上級者モード＋警告。
+
+## 2026-11-11 の環境の罠
+
+- **vitest がこの環境で起動失敗**: trivial な `expect(1).toBe(1)` でも `TypeError: Cannot read properties of undefined (reading 'config')`。vitest 5.1.0/5.0.5 両方、`npm ci` 後も再現。2 日前は 390 件通っていたので環境側（vite 8 + node 24 + OS 状態）の問題。単体テストは実行不可のため、機能は Electron アプリ + 仮想リーダーで検証した。build/package は vitest 非依存で正常。
+- **リーダーが PnP「Unknown」で PC/SC に出ない**ことがある（スリープ/再開後など）。PaSoRi を USB で抜き差しすると復帰。

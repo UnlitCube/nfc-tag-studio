@@ -4,6 +4,7 @@
 
 import type { TagKind } from '@shared/tags';
 import {
+  isFelica,
   isForbiddenUnit,
   isMifare,
   isNtag,
@@ -36,6 +37,7 @@ import { createSimulatorBackend, type SimulatorBackend } from './simulator';
 import { ReaderIo, resolveDriver } from './driver';
 import { ntagGetVersionBytes, readNtag, readNtagPage, writeNtagPages } from './ntag';
 import { mifareTrailerReadbackMask, readMifare, readMifareBlock, writeMifare } from './mifare';
+import { readFelica, readFelicaBlock, writeFelica } from './felica';
 
 /** Promise-chain mutex: run() calls execute strictly one after another. */
 class Mutex {
@@ -150,6 +152,12 @@ export function createNfcService(deps: NfcServiceDeps): NfcService {
     if (manualKind) {
       kind = manualKind;
       source = 'manual';
+    }
+    // FeliCa first (ATR standard byte 0x11): it is not an ISO-A tag, so skip the
+    // NTAG GET_VERSION / CC probes entirely.
+    if (!kind && kindHintFromAtr(atrBytes) === 'FELICA') {
+      kind = 'FELICA_LITE_S';
+      source = 'atr';
     }
     if (!kind && io.rawCommands) {
       const v = await ntagGetVersionBytes(io);
@@ -314,6 +322,10 @@ export function createNfcService(deps: NfcServiceDeps): NfcService {
           const r = await readNtag(io, kind, { password: opts.ntagPassword });
           return { kind, uid, data: r.data, unitStatus: r.unitStatus, readAt: Date.now(), ntag: r.extras };
         }
+        if (isFelica(kind)) {
+          const r = await readFelica(io, kind, await io.getUid());
+          return { kind, uid, data: r.data, unitStatus: r.unitStatus, readAt: Date.now(), felica: r.info };
+        }
         const keys = deps.resolveKeys(opts.mifareKeyIds ?? []);
         const r = await readMifare(io, kind, keys);
         return { kind, uid, data: r.data, unitStatus: r.unitStatus, readAt: Date.now(), mifare: { sectors: r.sectors } };
@@ -345,6 +357,10 @@ export function createNfcService(deps: NfcServiceDeps): NfcService {
           const r = await writeNtagPages(io, req.writes, { password: req.ntagPassword });
           written = r.written;
           failed = r.failed;
+        } else if (isFelica(req.kind)) {
+          const r = await writeFelica(io, req.kind, await io.getUid(), req.writes);
+          written = r.written;
+          failed = r.failed;
         } else {
           const keys = deps.resolveKeys(req.mifareKeyIds ?? []);
           const r = await writeMifare(io, req.writes, keys);
@@ -360,7 +376,15 @@ export function createNfcService(deps: NfcServiceDeps): NfcService {
           for (const w of req.writes) {
             if (!written.includes(w.unit)) continue;
             try {
-              const back = isNtag(req.kind) ? await readNtagPage(io, w.unit) : await readMifareBlock(io, w.unit, keys);
+              const back = isNtag(req.kind)
+                ? await readNtagPage(io, w.unit)
+                : isFelica(req.kind)
+                  ? await readFelicaBlock(io, req.kind, await io.getUid(), w.unit)
+                  : await readMifareBlock(io, w.unit, keys);
+              if (back === null) {
+                // unreadable (e.g. a write-only / protected FeliCa block) - skip verify
+                continue;
+              }
               // A MIFARE sector trailer never reads its Key A back (and may hide
               // Key B): compare against what the card can actually return, so a
               // correct trailer write is not reported as a mismatch (I4: keys are

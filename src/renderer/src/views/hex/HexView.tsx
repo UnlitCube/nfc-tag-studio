@@ -29,7 +29,8 @@ import {
   Upload,
 } from 'lucide-react';
 import type { TagKind } from '@shared/tags';
-import { TAG_KINDS, isForbiddenUnit, isMifare, isNtag, isProtectedUnit, mifareDataBlocks, specFor } from '@shared/tags';
+import { TAG_KINDS, felicaBlockOfUnit, isFelica, isForbiddenUnit, isMifare, isNtag, isProtectedUnit, mifareDataBlocks, specFor } from '@shared/tags';
+import { felicaBlockName } from '@shared/felica';
 import { blankImage, importDump, planWrites } from '@shared/tag';
 import { FILE_FILTERS } from '@shared/api';
 import type { WriteRequest } from '@shared/types';
@@ -64,6 +65,7 @@ import {
 import type { ByteMode, Endian } from './model';
 import { perByteStructure } from './inspect';
 import { UnitInspector } from './UnitInspector';
+import { FlagEditor } from './FlagEditor';
 import './hex.css';
 
 const cx = (...c: (string | false | null | undefined)[]): string => c.filter(Boolean).join(' ');
@@ -79,6 +81,9 @@ const REGION_MSG: Record<string, MsgKey> = {
   config: 'hex.region.config',
   password: 'hex.region.password',
   trailer: 'hex.region.trailer',
+  reg: 'hex.region.reg',
+  mc: 'hex.region.mc',
+  system: 'hex.region.system',
 };
 
 function regionLabel(key: string): MsgKey {
@@ -558,7 +563,14 @@ function HexEditor() {
       if (isForbiddenUnit(kind, u)) anyForbidden = true;
       else if (isProtectedUnit(kind, u)) anyProtected = true;
     }
-    const addrLabel = firstUnit === lastUnit ? String(firstUnit) : `${firstUnit}–${lastUnit}`;
+    // FeliCa: label rows by block name (S_PAD0, REG, MC) instead of unit index.
+    const addrLabel = isFelica(kind)
+      ? firstUnit === lastUnit
+        ? felicaBlockName(felicaBlockOfUnit(kind, firstUnit))
+        : `${felicaBlockName(felicaBlockOfUnit(kind, firstUnit))}…`
+      : firstUnit === lastUnit
+        ? String(firstUnit)
+        : `${firstUnit}–${lastUnit}`;
     const rowTitle = `${unitWord} ${addrLabel}`;
 
     const hexCells = [];
@@ -809,6 +821,9 @@ function HexEditor() {
           gridRef.current?.focus();
         }}
       />
+
+      {/* Parameter / flag editor: edit config flags through labelled controls. */}
+      <FlagEditor kind={kind} data={data} unit={unitOfByte(kind, cursor)} advanced={advanced} onApply={applyEdit} confirm={confirm} />
 
       <div className="hx-panelgrid">
         <Card

@@ -5,6 +5,8 @@
 import type { LanguageSetting } from '@shared/types';
 import type { TagKind } from '@shared/tags';
 import {
+  felicaBlockOfUnit,
+  isFelica,
   isMifare,
   isNtag,
   mifareIsTrailer,
@@ -16,6 +18,7 @@ import {
 } from '@shared/tags';
 import { readNtagConfig, readNtagLockState, describeAccess } from '@shared/tag';
 import { scanType2Tlvs } from '@shared/ndef';
+import { decodeFelicaMc, felicaBlockName } from '@shared/felica';
 
 export type Tone = 'info' | 'ok' | 'warn' | 'danger' | 'neutral';
 
@@ -301,6 +304,56 @@ function mifareInspection(data: Uint8Array, unit: number, lang: LanguageSetting)
   return groups;
 }
 
+function felicaInspection(data: Uint8Array, unit: number, lang: LanguageSetting): InspectGroup[] {
+  const off = unit * 16;
+  const block = felicaBlockOfUnit('FELICA_LITE_S', unit);
+  const groups: InspectGroup[] = [];
+  // MC (0x88) is always the last unit; decode its write-permission bitmap + mode.
+  const mcOff = 15 * 16;
+  const mc = decodeFelicaMc(data.subarray(mcOff, mcOff + 16));
+  if (block === 0x88) {
+    const fields: BitField[] = [
+      {
+        bits: L(lang, 'バイト2 b0', 'byte 2 b0'),
+        name: 'SYS_OP',
+        value: mc.liteS ? 'Lite-S' : 'Lite',
+        meaning: L(lang, '動作モード。1 = FeliCa Lite-S 拡張、0 = Lite 互換。', 'Operation mode. 1 = Lite-S extended, 0 = Lite compatible.'),
+        tone: 'info',
+      },
+    ];
+    for (let b = 0; b <= 0x0e; b++) {
+      fields.push({
+        bits: b < 8 ? `MC[0] b${b}` : `MC[1] b${b - 8}`,
+        name: felicaBlockName(b),
+        value: mc.writable[b] ? L(lang, '読み書き', 'read/write') : L(lang, '読み取り専用', 'read-only'),
+        meaning: mc.writable[b]
+          ? L(lang, 'このブロックは書き込み可能。', 'This block is writable.')
+          : L(lang, 'このブロックは読み取り専用（0 にすると戻せません）。', 'This block is read-only (setting 0 is irreversible).'),
+        tone: mc.writable[b] ? 'ok' : 'warn',
+      });
+    }
+    groups.push({ label: L(lang, 'MC（メモリ構成・0x88）', 'MC (memory configuration, 0x88)'), from: off, to: off + 15, fields });
+    return groups;
+  }
+  // A data / REG block: show its FeliCa block name and current write permission.
+  const writable = block <= 0x0e ? mc.writable[block] : true;
+  groups.push({
+    label: `${felicaBlockName(block)}（0x${block.toString(16).toUpperCase().padStart(2, '0')}）`,
+    from: off,
+    to: off + 15,
+    fields: [
+      {
+        bits: '',
+        name: L(lang, '書き込み可否', 'Write permission'),
+        value: writable ? L(lang, '読み書き', 'read/write') : L(lang, '読み取り専用', 'read-only'),
+        meaning: L(lang, 'MC（0x88）の設定で決まります。', 'Determined by the MC block (0x88).'),
+        tone: writable ? 'ok' : 'warn',
+      },
+    ],
+  });
+  return groups;
+}
+
 /** Inspect one unit (page/block): region, summary, and decoded bit-fields. */
 export function inspectUnit(kind: TagKind, data: Uint8Array, unit: number, lang: LanguageSetting): UnitInspection {
   const spec = specFor(kind);
@@ -319,10 +372,13 @@ export function inspectUnit(kind: TagKind, data: Uint8Array, unit: number, lang:
     if (unit !== 0 && !mifareIsTrailer(unit)) {
       summary = L(lang, `データブロック（セクタ ${mifareSectorOfBlock(unit)}）。`, `Data block (sector ${mifareSectorOfBlock(unit)}).`);
     }
+  } else if (isFelica(kind)) {
+    groups = felicaInspection(data, unit, lang);
   }
+  const unitLabel = isFelica(kind) ? felicaBlockName(felicaBlockOfUnit(kind, unit)) : `${unitWord} ${unit}`;
   return {
     unit,
-    unitLabel: `${unitWord} ${unit}`,
+    unitLabel,
     regionLabel: region?.label ?? '',
     summary,
     editable,

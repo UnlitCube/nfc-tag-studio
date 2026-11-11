@@ -17,6 +17,7 @@ import type { ReaderInfo, SimulatorState } from '@shared/types';
 import type { TagKind } from '@shared/tags';
 import {
   factoryImage,
+  isFelica,
   isForbiddenUnit,
   isMifare,
   isNtag,
@@ -24,7 +25,10 @@ import {
   mifareSectorOfBlock,
   mifareTrailerBlock,
   ntagPages,
+  specFor,
+  FELICA_LITE_S_SYSTEM_CODE,
 } from '@shared/tags';
+import { decodeFelicaMc } from '@shared/felica';
 import { bytesToHex } from '@shared/hex';
 import { VIRTUAL_READER_NAME } from '@shared/reader';
 import { OpError } from '../errors';
@@ -63,8 +67,10 @@ function makeUid(bytes: number): Uint8Array {
 
 /** PC/SC Part 3 storage-card pseudo-ATR carrying the card-name hint. */
 function storageAtr(kind: TagKind): Uint8Array {
-  const cardName = isMifare(kind) ? (kind === 'MIFARE_CLASSIC_1K' ? 0x0001 : 0x0002) : 0x0003; // 0003 = Type 2
-  const body = [0x3b, 0x8f, 0x80, 0x01, 0x80, 0x4f, 0x0c, 0xa0, 0x00, 0x00, 0x03, 0x06, 0x03, (cardName >> 8) & 0xff, cardName & 0xff, 0x00, 0x00, 0x00, 0x00];
+  // FeliCa: standard byte 0x11; others: standard 0x03 + card-name hint.
+  const standard = isFelica(kind) ? 0x11 : 0x03;
+  const cardName = isFelica(kind) ? 0x0000 : isMifare(kind) ? (kind === 'MIFARE_CLASSIC_1K' ? 0x0001 : 0x0002) : 0x0003;
+  const body = [0x3b, 0x8f, 0x80, 0x01, 0x80, 0x4f, 0x0c, 0xa0, 0x00, 0x00, 0x03, 0x06, standard, (cardName >> 8) & 0xff, cardName & 0xff, 0x00, 0x00, 0x00, 0x00];
   let tck = 0;
   for (let i = 1; i < body.length; i++) tck ^= body[i];
   return Uint8Array.from([...body, tck]);
@@ -85,7 +91,7 @@ class VirtualTag {
 
   constructor(kind: TagKind, uid?: Uint8Array) {
     this.kind = kind;
-    this.uid = uid ?? makeUid(isNtag(kind) ? 7 : 4);
+    this.uid = uid ?? makeUid(isFelica(kind) ? 8 : isNtag(kind) ? 7 : 4);
     this.image = factoryImage(kind, this.uid);
   }
 
@@ -271,6 +277,7 @@ class VirtualConnection implements CardConnection {
   /** Interpret one native NFC-A command. status 0 = ok, non-zero = transport error. */
   private rawCommand(tag: VirtualTag, cmd: Uint8Array): { status: number; payload: Uint8Array } {
     if (cmd.length === 0) return { status: 0x01, payload: EMPTY };
+    if (isFelica(tag.kind)) return { status: 0, payload: this.felicaCommand(tag, cmd) };
     if (isMifare(tag.kind)) return { status: 0x01, payload: EMPTY }; // raw NFC-A not modelled for MIFARE
     const nak = (): { status: number; payload: Uint8Array } => ({ status: NTAG_NAK_STATUS, payload: Uint8Array.from([0x00]) });
     switch (cmd[0]) {
@@ -310,6 +317,81 @@ class VirtualConnection implements CardConnection {
       default:
         return { status: 0x01, payload: EMPTY };
     }
+  }
+
+  /** Read a FeliCa block number from the image (grid blocks) or synthesize a
+   * read-only system block. Returns null when the block is not modelled. */
+  private felicaBlock(tag: VirtualTag, block: number): Uint8Array | null {
+    const spec = specFor(tag.kind);
+    const unit = (spec.blockMap ?? []).indexOf(block);
+    if (unit >= 0) return tag.image.subarray(unit * 16, unit * 16 + 16).slice();
+    const out = new Uint8Array(16);
+    switch (block) {
+      case 0x82: // ID = DFC(2) + IDm(8) + reserved
+        out.set(tag.uid.subarray(0, 8), 2);
+        return out;
+      case 0x85: // SYS_C
+        out[0] = (FELICA_LITE_S_SYSTEM_CODE >> 8) & 0xff;
+        out[1] = FELICA_LITE_S_SYSTEM_CODE & 0xff;
+        return out;
+      case 0x86: // CKV
+      case 0x90: // WCNT
+      case 0x92: // STATE
+        return out;
+      default:
+        return null;
+    }
+  }
+
+  /** Emulate FeliCa Lite-S Polling / Read / Write Without Encryption. Returns the
+   * FeliCa response frame ([len, respCode, ...]); an empty frame means no reply. */
+  private felicaCommand(tag: VirtualTag, packet: Uint8Array): Uint8Array {
+    // packet = [len, cmd, ...]
+    const cmd = packet[1];
+    const frame = (payload: number[]): Uint8Array => Uint8Array.from([payload.length + 1, ...payload]);
+    if (cmd === 0x00) {
+      // Polling: [len,00, sys(2), reqCode, timeSlot] -> [len,01, IDm(8), PMm(8), (sysC)]
+      const reqCode = packet[4] ?? 0x00;
+      const pmm = new Uint8Array(8).fill(0xff);
+      const body = [0x01, ...tag.uid.subarray(0, 8), ...pmm];
+      if (reqCode === 0x01) body.push((FELICA_LITE_S_SYSTEM_CODE >> 8) & 0xff, FELICA_LITE_S_SYSTEM_CODE & 0xff);
+      return frame(body);
+    }
+    if (cmd === 0x06) {
+      // Read Without Encryption: [len,06, IDm(8), nSvc, svc(2), nBlk, blkList...]
+      const nBlk = packet[13] ?? 0;
+      const blocks: number[] = [];
+      let off = 14;
+      for (let i = 0; i < nBlk; i++) {
+        // 2-byte element: [0x80, blockNo]
+        blocks.push(packet[off + 1] ?? 0);
+        off += 2;
+      }
+      const datas: number[] = [];
+      for (const b of blocks) {
+        const blk = this.felicaBlock(tag, b);
+        if (!blk) return frame([0x07, ...tag.uid.subarray(0, 8), 0x01, 0xa8]); // status error
+        datas.push(...Array.from(blk));
+      }
+      return frame([0x07, ...tag.uid.subarray(0, 8), 0x00, 0x00, blocks.length, ...datas]);
+    }
+    if (cmd === 0x08) {
+      // Write Without Encryption: [len,08, IDm(8), nSvc, svc(2), nBlk, blkList(2), data(16)]
+      const block = packet[15] ?? 0;
+      const data = packet.subarray(16, 32);
+      const spec = specFor(tag.kind);
+      const unit = (spec.blockMap ?? []).indexOf(block);
+      if (unit < 0) return frame([0x09, ...tag.uid.subarray(0, 8), 0x01, 0xa8]); // not writable
+      // Enforce the MC per-block write-permission bitmap for user blocks (0x00-0x0E).
+      if (block <= 0x0e) {
+        const mcUnit = (spec.blockMap ?? []).indexOf(0x88);
+        const mc = decodeFelicaMc(tag.image.subarray(mcUnit * 16, mcUnit * 16 + 16));
+        if (!mc.writable[block]) return frame([0x09, ...tag.uid.subarray(0, 8), 0x02, 0xa8]); // read-only
+      }
+      tag.image.set(data.subarray(0, 16), unit * 16);
+      return frame([0x09, ...tag.uid.subarray(0, 8), 0x00, 0x00]);
+    }
+    return EMPTY;
   }
 }
 

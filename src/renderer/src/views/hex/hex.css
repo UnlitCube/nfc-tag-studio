@@ -461,3 +461,37 @@
 .hx-cell.forbidden {
   cursor: not-allowed;
 }
+
+/* ---------- flag / parameter editor ---------- */
+.flags-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  padding: var(--space-2) 0;
+  border-bottom: 1px solid var(--border);
+}
+.flags-row:last-child {
+  border-bottom: 0;
+}
+.flags-row-label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-weight: 600;
+  min-width: 0;
+}
+.flags-row-label.flags-danger {
+  color: var(--danger);
+}
+.flags-row-control {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  flex: 0 0 auto;
+}
+.flags-felica-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  gap: 6px var(--space-3);
+}

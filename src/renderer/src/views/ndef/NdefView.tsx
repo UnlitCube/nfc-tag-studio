@@ -9,7 +9,7 @@ import './ndef.css';
 import { useMemo, useState } from 'react';
 import { Download, FileText, Nfc, PenLine, Send, Upload } from 'lucide-react';
 import type { TagKind } from '@shared/tags';
-import { TAG_KINDS, isNtag, specFor } from '@shared/tags';
+import { TAG_KINDS, isFelica, isNtag, specFor } from '@shared/tags';
 import type { NdefRecordDraft } from '@shared/ndef/types';
 import {
   buildMifareNdefWrites,
@@ -214,6 +214,19 @@ export function NdefView() {
     });
   }
 
+  // FeliCa Lite-S uses a different NDEF mapping (via MC); this NDEF editor targets
+  // NFC Forum Type 2 (NTAG) and MIFARE Classic. Steer FeliCa to the binary editor.
+  if (source === 'card' && doc && isFelica(doc.image.kind)) {
+    return (
+      <Page>
+        <PageHeader title={t('ndef.title')} subtitle={t('ndef.subtitle')} helpTopic="ndef" />
+        <Callout tone="warn" title={t('ndef.felicaTitle')}>
+          {t('ndef.felicaBody')}
+        </Callout>
+      </Page>
+    );
+  }
+
   return (
     <Page>
       <PageHeader
@@ -294,7 +307,7 @@ export function NdefView() {
               <Select<TagKind>
                 value={newKind}
                 onChange={setNewKind}
-                options={TAG_KINDS.map((k) => ({ value: k, label: kindLabel(k) }))}
+                options={TAG_KINDS.filter((k) => !isFelica(k)).map((k) => ({ value: k, label: kindLabel(k) }))}
               />
             </Field>
           ) : null}
