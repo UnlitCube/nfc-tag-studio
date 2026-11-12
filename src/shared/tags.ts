@@ -373,11 +373,14 @@ export function kindFromFelicaSystemCode(systemCode: number): TagKind | null {
 }
 
 /**
- * Tell Lite-S from Lite by the MC block: on Lite-S, MC[2] (SYS_OP) bit0 = 1.
- * Returns true when the MC indicates Lite-S. (Both share system code 0x88B4.)
+ * Lite-S vs Lite. NOTE (2026-11-12): MC[2] is the system-block write-enable
+ * (0xFF/0x00), NOT a "SYS_OP" bit - the earlier interpretation here was wrong.
+ * This app identifies Lite-S by its system code (0x88B4, see
+ * kindFromFelicaSystemCode); this helper is unused and kept only for the API
+ * surface. A factory card reads MC[2] = 0xFF, so it reports true.
  */
 export function felicaIsLiteS(mcBlock: Uint8Array): boolean {
-  return mcBlock.length >= 3 && (mcBlock[2] & 0x01) === 0x01;
+  return mcBlock.length >= 3 && mcBlock[2] === 0xff;
 }
 
 // --- factory images (simulator + "new document") --------------------------------
@@ -399,13 +402,16 @@ export function factoryImage(kind: TagKind, uid: Uint8Array): Uint8Array {
   const spec = specFor(kind);
   const data = new Uint8Array(spec.unitCount * spec.unitSize);
   if (isFelica(kind)) {
-    // FeliCa Lite-S: user blocks (0x00..0x0D) and REG (0x0E) zeroed; MC (0x88) at
-    // factory default. MC[0]/MC[1] = per-block write-permission bitmap (0xFF = all
-    // writable), MC[2] bit0 = SYS_OP (1 = Lite-S). ndef_en byte left 0.
+    // FeliCa Lite-S factory-default MC (block 0x88) = FF FF FF 01 07 00..00.
+    // The write/read-protect masks (MC[6:8], MC[8:10], MC[10:12]) are 0 = all
+    // user blocks writable; MC[2] = 0xFF = system blocks writable. (See the MC
+    // notes in src/shared/felica.ts.) User blocks 0x00-0x0D + REG (0x0E) zeroed.
     const mcOff = 15 * 16; // last unit = MC
-    data[mcOff + 0] = 0xff; // blocks 0x00-0x07 writable
-    data[mcOff + 1] = 0xff; // blocks 0x08-0x0E writable
-    data[mcOff + 2] = 0x01; // SYS_OP = Lite-S
+    data[mcOff + 0] = 0xff;
+    data[mcOff + 1] = 0xff;
+    data[mcOff + 2] = 0xff;
+    data[mcOff + 3] = 0x01;
+    data[mcOff + 4] = 0x07;
     return data;
   }
   if (isNtag(kind)) {

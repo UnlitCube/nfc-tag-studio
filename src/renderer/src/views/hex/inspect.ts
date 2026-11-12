@@ -314,21 +314,22 @@ function felicaInspection(data: Uint8Array, unit: number, lang: LanguageSetting)
   if (block === 0x88) {
     const fields: BitField[] = [
       {
-        bits: L(lang, 'バイト2 b0', 'byte 2 b0'),
-        name: 'SYS_OP',
-        value: mc.liteS ? 'Lite-S' : 'Lite',
-        meaning: L(lang, '動作モード。1 = FeliCa Lite-S 拡張、0 = Lite 互換。', 'Operation mode. 1 = Lite-S extended, 0 = Lite compatible.'),
-        tone: 'info',
+        bits: L(lang, 'バイト2', 'byte 2'),
+        name: L(lang, 'システムブロック', 'System blocks'),
+        value: mc.systemBlocksWritable ? L(lang, '読み書き', 'read/write') : L(lang, '読み取り専用', 'read-only'),
+        meaning: L(lang, 'ID・鍵・MC などシステムブロックの書き込み可否（0xFF = 可 / 0x00 = 読み取り専用）。', 'Write permission of the system blocks (ID, keys, MC): 0xFF = writable, 0x00 = read-only.'),
+        tone: mc.systemBlocksWritable ? 'info' : 'warn',
       },
     ];
+    // Write-protect mask (two copies: MC[8:10] and MC[10:12]); 1 = read-only.
     for (let b = 0; b <= 0x0e; b++) {
       fields.push({
-        bits: b < 8 ? `MC[0] b${b}` : `MC[1] b${b - 8}`,
+        bits: b < 8 ? `MC[8] b${b}` : `MC[9] b${b - 8}`,
         name: felicaBlockName(b),
         value: mc.writable[b] ? L(lang, '読み書き', 'read/write') : L(lang, '読み取り専用', 'read-only'),
         meaning: mc.writable[b]
           ? L(lang, 'このブロックは書き込み可能。', 'This block is writable.')
-          : L(lang, 'このブロックは読み取り専用（0 にすると戻せません）。', 'This block is read-only (setting 0 is irreversible).'),
+          : L(lang, 'このブロックは読み取り専用（保護ビットを立てると戻せません）。', 'This block is read-only (setting the protect bit is irreversible).'),
         tone: mc.writable[b] ? 'ok' : 'warn',
       });
     }

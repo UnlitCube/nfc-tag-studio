@@ -114,45 +114,62 @@ export function parseWrite(resp: Uint8Array): { statusFlag1: number; statusFlag2
 
 // --- MC (Memory Configuration, block 0x88) -----------------------------------
 //
-// MC[0] / MC[1] = MC_ALL: per-block read/write permission for blocks 0x00..0x0E.
-//   MC[0] bit i (i=0..7)  -> block 0x00..0x07
-//   MC[1] bit i (i=0..6)  -> block 0x08..0x0E
-//   1 = read & write, 0 = read-only (writing 0 is IRREVERSIBLE for that block).
-// MC[2] bit0 = SYS_OP: 0 = FeliCa Lite compatible, 1 = Lite-S extended mode.
-// Other MC bytes carry RF / system-block settings and are shown as raw.
+// Corrected 2026-11-12 against real FeliCa Lite-S hardware + nfcpy (FelicaLiteS).
+// The per-block protection for Lite-S is NOT in MC[0]/MC[1] (that was wrong and
+// had no effect on real cards); it lives in dedicated 16-bit masks, written as
+// two identical copies, bit b (b = 0..14) controlling block 0x00..0x0E:
+//   MC[6:8]   = read-protect mask   (1 = read protected)   - needs a card key/MAC
+//   MC[8:10]  = write-protect mask  (1 = read-only)         } same value written
+//   MC[10:12] = write-protect mask  (duplicate of MC[8:10]) } to both pairs
+//   little-endian: MC[8] bit b -> block b (0..7), MC[9] bit (b-8) -> block 8..14.
+//   Setting a write-protect bit to 1 is IRREVERSIBLE and latches on the next RF
+//   activation (physical reseat on a PaSoRi; see CLAUDE.md).
+// MC[2] = system-block (ID/SER_C/CKV/CK/MC) write enable: 0xFF = writable,
+//   0x00 = read-only. (NOT a "SYS_OP" bit; Lite-S is identified by system code.)
+// Factory default MC = FF FF FF 01 07 00..00 (all user blocks writable).
 
 export interface FelicaMc {
-  /** index 0..14 -> writable flag for block 0x00..0x0E. */
+  /** index 0..14 -> writable flag for block 0x00..0x0E (false = read-only). */
   writable: boolean[];
-  /** false = Lite compatible, true = Lite-S. */
-  liteS: boolean;
+  /** index 0..14 -> read-protected flag for block 0x00..0x0E. */
+  readProtected: boolean[];
+  /** System blocks writable: MC[2] === 0xFF (0x00 = read-only). */
+  systemBlocksWritable: boolean;
   raw: Uint8Array;
 }
 
 export function decodeFelicaMc(mc: Uint8Array): FelicaMc {
+  const writeMask = (mc[8] | (mc[9] << 8)) & 0xffff; // 1 = write protected (read-only)
+  const readMask = (mc[6] | (mc[7] << 8)) & 0xffff; // 1 = read protected
   const writable: boolean[] = [];
+  const readProtected: boolean[] = [];
   for (let b = 0; b <= 0x0e; b++) {
-    const byte = b < 8 ? mc[0] : mc[1];
-    const bit = b < 8 ? b : b - 8;
-    writable.push(((byte >> bit) & 1) === 1);
+    writable.push(((writeMask >> b) & 1) === 0);
+    readProtected.push(((readMask >> b) & 1) === 1);
   }
-  return { writable, liteS: (mc[2] & 0x01) === 1, raw: mc.slice(0, 16) };
+  return { writable, readProtected, systemBlocksWritable: mc[2] === 0xff, raw: mc.slice(0, 16) };
 }
 
-/** Re-encode MC[0], MC[1] (write bitmap) and MC[2] bit0 (SYS_OP); other bytes kept. */
+/**
+ * Re-encode the Lite-S protection masks (MC[6:8] read, MC[8:10] + MC[10:12] write)
+ * and MC[2] (system-block write enable); all other MC bytes are preserved.
+ */
 export function encodeFelicaMc(mc: FelicaMc): Uint8Array {
   const out = new Uint8Array(16);
   out.set(mc.raw.subarray(0, 16));
-  let b0 = 0;
-  let b1 = 0;
+  let writeMask = 0;
+  let readMask = 0;
   for (let b = 0; b <= 0x0e; b++) {
-    if (!mc.writable[b]) continue;
-    if (b < 8) b0 |= 1 << b;
-    else b1 |= 1 << (b - 8);
+    if (!mc.writable[b]) writeMask |= 1 << b; // 1 = read-only
+    if (mc.readProtected[b]) readMask |= 1 << b;
   }
-  out[0] = b0;
-  out[1] = b1;
-  out[2] = (out[2] & ~0x01) | (mc.liteS ? 0x01 : 0x00);
+  out[6] = readMask & 0xff;
+  out[7] = (readMask >> 8) & 0xff;
+  out[8] = writeMask & 0xff;
+  out[9] = (writeMask >> 8) & 0xff;
+  out[10] = out[8]; // write-protect mask is stored as two identical copies
+  out[11] = out[9];
+  out[2] = mc.systemBlocksWritable ? 0xff : 0x00;
   return out;
 }
 

@@ -1,9 +1,6 @@
-// FeliCa Lite-S pure-logic tests: command framing round-trips, MC decode/encode,
-// identification. NOTE: these could not be executed in the 2026-11-11 session
-// because vitest itself failed to run in that environment (a trivial
-// `expect(1).toBe(1)` threw "Cannot read properties of undefined (reading
-// 'config')"); the FeliCa feature was verified end-to-end via the Electron app +
-// virtual reader instead. Run with `npm run unit` once the toolchain is healthy.
+// FeliCa Lite-S pure-logic tests: command framing round-trips, MC decode/encode
+// (write/read-protect masks at MC[6:12], verified against real hardware
+// 2026-11-12), identification. Run with `npm run unit`.
 import { describe, it, expect } from 'vitest';
 import {
   felicaPolling,
@@ -92,23 +89,45 @@ describe('FeliCa framing', () => {
 });
 
 describe('FeliCa MC', () => {
-  it('decodes a factory MC as all-writable, Lite-S', () => {
-    const img = factoryImage('FELICA_LITE_S', IDM);
+  const mcOf = (img: Uint8Array) => {
     const mcUnit = specFor('FELICA_LITE_S').unitCount - 1;
-    const mc = decodeFelicaMc(img.subarray(mcUnit * 16, mcUnit * 16 + 16));
-    expect(mc.liteS).toBe(true);
+    return decodeFelicaMc(img.subarray(mcUnit * 16, mcUnit * 16 + 16));
+  };
+
+  it('decodes a factory MC as all-writable with system blocks writable', () => {
+    const mc = mcOf(factoryImage('FELICA_LITE_S', IDM));
     expect(mc.writable.slice(0, 15).every(Boolean)).toBe(true);
+    expect(mc.readProtected.slice(0, 15).some(Boolean)).toBe(false);
+    expect(mc.systemBlocksWritable).toBe(true);
   });
 
-  it('round-trips write-permission edits through encode/decode', () => {
-    const img = factoryImage('FELICA_LITE_S', IDM);
-    const mcUnit = specFor('FELICA_LITE_S').unitCount - 1;
-    const mc = decodeFelicaMc(img.subarray(mcUnit * 16, mcUnit * 16 + 16));
-    mc.writable[5] = false; // make S_PAD5 read-only
-    const re = decodeFelicaMc(encodeFelicaMc(mc));
+  it('puts the write-protect mask in MC[8:10] AND MC[10:12] (1 = read-only), not MC[0]/MC[1]', () => {
+    // Regression: Lite-S block write protection lives in MC[8:12], polarity 1 =
+    // protected. The old model (MC[0]/MC[1], 1 = writable) did nothing on real cards.
+    const mc = mcOf(factoryImage('FELICA_LITE_S', IDM));
+    mc.writable[5] = false; // S_PAD5 (block 0x05) read-only
+    mc.writable[14] = false; // REG (block 0x0E) read-only
+    const out = encodeFelicaMc(mc);
+    expect(out[8] & (1 << 5)).toBe(1 << 5); // block 5 -> MC[8] bit5
+    expect(out[9] & (1 << 6)).toBe(1 << 6); // block 14 (REG) -> MC[9] bit6
+    expect(out[10]).toBe(out[8]); // duplicated copy
+    expect(out[11]).toBe(out[9]);
+    expect(out[0]).toBe(0xff); // MC[0]/MC[1] left as factory raw (NOT the write mask)
+    expect(out[1]).toBe(0xff);
+    const re = decodeFelicaMc(out);
     expect(re.writable[5]).toBe(false);
+    expect(re.writable[14]).toBe(false);
     expect(re.writable[4]).toBe(true);
-    expect(re.liteS).toBe(true);
+  });
+
+  it('round-trips read-protect and system-block edits', () => {
+    const mc = mcOf(factoryImage('FELICA_LITE_S', IDM));
+    mc.readProtected[3] = true;
+    mc.systemBlocksWritable = false;
+    const re = decodeFelicaMc(encodeFelicaMc(mc));
+    expect(re.readProtected[3]).toBe(true);
+    expect(re.readProtected[2]).toBe(false);
+    expect(re.systemBlocksWritable).toBe(false);
   });
 });
 

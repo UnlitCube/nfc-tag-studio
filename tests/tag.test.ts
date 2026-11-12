@@ -374,6 +374,33 @@ describe('NTAG config', () => {
     const again = applyWrites('NTAG213', locked, buildNtagLockUserAreaWrites('NTAG213', locked));
     expect(Array.from(again)).toEqual(Array.from(locked));
   });
+
+  it('does not report blockLocked for a factory NTAG213 (dyn byte3 reads 0xBD, not a lock bit)', () => {
+    // Regression (2026-11-12 real hardware): page 0x28 byte3 is a constant 0xBD
+    // read-back, NOT a lock byte. The old code tested (byte3 & 0x07) and reported
+    // blockLocked=true for every NTAG213.
+    const img = blankImage('NTAG213', NTAG_UID);
+    const p = ntagPages('NTAG213');
+    const data = new Uint8Array(img.data);
+    data.set([0x00, 0x00, 0x00, 0xbd], p.dynLock * 4); // true factory dynamic-lock page
+    const state = readNtagLockState('NTAG213', data);
+    expect(state.blockLocked).toBe(false);
+    expect(state.lockedPages).toEqual([]);
+  });
+
+  it('NTAG213 dynamic lock locks 2 pages per bit (byte0 bit0 -> pages 16 and 17)', () => {
+    // Regression (2026-11-12 real hardware): NTAG213 granularity is 2 pages/bit,
+    // not 1 (byte0 bit0 locked pages 0x10 AND 0x11 on a real tag).
+    const img = blankImage('NTAG213', NTAG_UID);
+    const p = ntagPages('NTAG213');
+    const data = new Uint8Array(img.data);
+    data.set([0x01, 0x00, 0x00, 0xbd], p.dynLock * 4); // byte0 bit0 set
+    const state = readNtagLockState('NTAG213', data);
+    expect(state.lockedPages).toContain(16);
+    expect(state.lockedPages).toContain(17);
+    expect(state.lockedPages).not.toContain(18);
+    expect(state.blockLocked).toBe(false); // a page-lock bit, not a BL bit
+  });
 });
 
 // ---------------------------------------------------------------------------

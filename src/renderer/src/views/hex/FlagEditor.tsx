@@ -256,8 +256,10 @@ function FelicaFlags({ kind, data, onApply, t }: FlagEditorProps & { t: TFunc })
             <Checkbox key={block} checked={w} onChange={(v) => setWritable(block, v)} label={`${felicaBlockName(block)} ${t('flags.felica.writable')}`} />
           ))}
         </div>
-        <FlagRow label="SYS_OP" help={t('flags.felica.sysopHelp')}>
-          <Badge tone="info">{mc.liteS ? 'Lite-S' : 'Lite'}</Badge>
+        <FlagRow label={t('flags.felica.sysblocks')} help={t('flags.felica.sysblocksHelp')}>
+          <Badge tone={mc.systemBlocksWritable ? 'info' : 'warn'}>
+            {mc.systemBlocksWritable ? t('flags.felica.rw') : t('flags.felica.readonlyShort')}
+          </Badge>
         </FlagRow>
       </div>
     </Card>

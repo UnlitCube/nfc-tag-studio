@@ -111,22 +111,47 @@ export function readNtagLockState(kind: TagKind, data: Uint8Array): NtagLockStat
   if (ccLocked) locked.add(3);
   for (let bit = 4; bit <= 7; bit++) if (l0 & (1 << bit)) locked.add(bit); // pages 4-7
   for (let bit = 0; bit <= 7; bit++) if (l1 & (1 << bit)) locked.add(8 + bit); // pages 8-15
-  let blockLocked = (l0 & 0x07) !== 0;
+  let blockLocked = (l0 & 0x07) !== 0; // static block-locking bits (LOCK0 bit 0-2)
 
-  // Dynamic lock: bytes 0-2 of the dynamic-lock page. NTAG213 locks one page per
-  // bit (pages 16-39); NTAG215/216 lock in blocks of 16 pages from page 16.
+  // Dynamic lock bytes: bytes 0-2 of the dynamic-lock page carry the page-lock and
+  // block-locking (BL) bits. Byte 3 is NOT a lock byte - it reads back as a fixed
+  // constant (0xBD on NTAG213), so it must never be tested for lock bits.
+  // (Verified 2026-11-12 on real NTAG213 hardware; see CLAUDE.md.)
   const dynOff = p.dynLock * 4;
   const dyn = [data[dynOff], data[dynOff + 1], data[dynOff + 2]];
-  const gran = kind === 'NTAG213' ? 1 : 16;
-  for (let byteIdx = 0; byteIdx < 3; byteIdx++) {
+  if (kind === 'NTAG213') {
+    // Granularity 2 pages per bit (verified: byte0 bit0 locks pages 0x10-0x11):
+    //   byte0 bit i    -> pages 16+2i .. 17+2i   (pages 16-31)
+    //   byte1 bit j<4  -> pages 32+2j .. 33+2j   (pages 32-39)
+    //   byte2 bit 0-5  = block-locking (BL) bits. byte1 b4-7 / byte2 b6-7 = RFUI.
     for (let bit = 0; bit < 8; bit++) {
-      if (dyn[byteIdx] & (1 << bit)) {
-        const first = 16 + (byteIdx * 8 + bit) * gran;
-        for (let pg = first; pg < first + gran && pg <= p.userLast; pg++) locked.add(pg);
+      if (dyn[0] & (1 << bit)) {
+        const first = 16 + bit * 2;
+        locked.add(first);
+        locked.add(first + 1);
+      }
+    }
+    for (let bit = 0; bit < 4; bit++) {
+      if (dyn[1] & (1 << bit)) {
+        const first = 32 + bit * 2;
+        locked.add(first);
+        locked.add(first + 1);
+      }
+    }
+    if ((dyn[2] & 0x3f) !== 0) blockLocked = true; // dynamic block-locking bits
+  } else {
+    // NTAG215/216: dynamic lock in blocks of 16 pages from page 16. Exact bit
+    // positions not verified against hardware; follow the datasheet granularity.
+    const gran = 16;
+    for (let byteIdx = 0; byteIdx < 3; byteIdx++) {
+      for (let bit = 0; bit < 8; bit++) {
+        if (dyn[byteIdx] & (1 << bit)) {
+          const first = 16 + (byteIdx * 8 + bit) * gran;
+          for (let pg = first; pg < first + gran && pg <= p.userLast; pg++) locked.add(pg);
+        }
       }
     }
   }
-  if ((data[dynOff + 3] & 0x07) !== 0) blockLocked = true; // dynamic block-lock bits
 
   return { lockedPages: Array.from(locked).sort((a, b) => a - b), ccLocked, blockLocked };
 }
