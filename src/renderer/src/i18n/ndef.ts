@@ -7,15 +7,15 @@ export default defineMessages({
   ja: {
     // --- view ---
     'ndef.title': 'NDEF 編集',
-    'ndef.subtitle': 'タグの NDEF（URL・テキスト・Wi-Fi など）を確かめて組み立て、タグに書き込みます',
+    'ndef.subtitle': 'タグの NDEF（URL・テキスト・Wi-Fi など）を確認・編集して、タグに書き込みます',
     'ndef.uidNote': 'UID（製造番号）は製造時に固定され、書き換えも複製もできません。書き込むのはデータ領域（NDEF）の中身だけです。',
     'ndef.felicaTitle': 'FeliCa Lite-S は NDEF 編集の対象外です',
     'ndef.felicaBody': 'NDEF 編集は NTAG と MIFARE Classic に対応しています。FeliCa Lite-S のブロックは「バイナリ編集」で読み書きできます。',
     'ndef.openHex': 'バイナリ編集を開く',
 
     // --- where the records come from ---
-    'ndef.origin.title': 'レコードの出所',
-    'ndef.origin.label': '出所',
+    'ndef.origin.title': 'レコードの取得元',
+    'ndef.origin.label': '取得元',
     'ndef.origin.contents': '内容',
     'ndef.origin.none': 'まだありません',
     'ndef.origin.tag': 'タグ {uid}（{kind}）を {when} に読み取った内容',
@@ -47,7 +47,7 @@ export default defineMessages({
     'ndef.pending.title': '開いている文書が変わりました',
     'ndef.pending.body': '開いている文書（{what}）の NDEF は、編集中のレコードがあるため取り込んでいません。',
     'ndef.pending.action': 'この文書の NDEF を取り込む',
-    'ndef.replace.title': '編集中のレコードを置き換えます',
+    'ndef.replace.title': '編集中のレコードを置き換えますか？',
     'ndef.replace.body': '編集中のレコード（{n} 件）は失われます。',
     'ndef.replace.detail': '残したいときは「キャンセル」を押し、「NDEF ファイルに保存」してください。',
     'ndef.replace.ok': '置き換える',
@@ -66,8 +66,8 @@ export default defineMessages({
     'ndef.records': 'レコード',
     'ndef.recordsCount': '{n} 件',
     'ndef.capacityKind': '容量の目安にするタグの種類',
-    'ndef.capacityKindHint': 'リーダーにタグが無いあいだの目安です。書き込むときは、置かれているタグの実際の容量で確かめます。',
-    'ndef.capacityFromCard': '容量は、リーダーの上のタグ（{kind}）で表示しています。',
+    'ndef.capacityKindHint': 'リーダーにタグが無いときの目安です。書き込むときは、置かれているタグの実際の容量で確かめます。',
+    'ndef.capacityFromCard': '容量は、リーダーの上のタグ（{kind}）の値です。',
 
     'ndef.preview': 'プレビュー（エンコード結果）',
     'ndef.previewHint': 'タグに書き込まれる NDEF メッセージの生バイトです。',
@@ -77,8 +77,8 @@ export default defineMessages({
     // --- the tag to write ---
     'ndef.target.title': '書き込み先のタグ',
     'ndef.target.body':
-      '書き込みは、いまリーダーの上に置かれているタグに行います。書き込む直前にそのタグの中身を読み取り、変わるページ（ブロック）だけを書き込みます。終わるまでタグを置いたままにしてください（改札のように一瞬タッチするだけでは書き込めません）。',
-    'ndef.target.other': 'レコードの出所のタグ（{a}）とは別のタグ（{b}）が置かれています。書き込むと、{b} の NDEF が置き換わります。',
+      '書き込み先は、リーダーの上に置かれているタグです。書き込む直前にそのタグの中身を読み取り、変わる部分だけを書き込みます。終わるまで、タグを置いたままにしてください。',
+    'ndef.target.other': 'レコードを読み取ったタグ（{a}）とは別のタグ（{b}）が置かれています。書き込むと、{b} の NDEF が置き換わります。',
     'ndef.target.readThis': 'このタグを読み取る',
     'ndef.target.felica': '置かれているタグ（FeliCa Lite-S）には NDEF を書き込めません。NTAG か MIFARE Classic のタグを置いてください。',
     'ndef.writeToTag': 'タグに書き込む',
@@ -99,16 +99,16 @@ export default defineMessages({
     'ndef.plan.locked': '書き込むページがロックされていて書き換えられません（ロックは元に戻せません）。別のタグを使ってください。',
     'ndef.plan.same': 'このタグには、すでに同じ NDEF が書き込まれています。',
 
-    'ndef.confirmTitle': 'NDEF をタグに書き込みます',
+    'ndef.confirmTitle': 'NDEF をタグに書き込みますか？',
     'ndef.confirmMessage': 'タグ {uid}（{kind}）の NDEF を、組み立てたレコードで置き換えます。UID は変わりません。',
     'ndef.confirmRecords': '書き込むレコード: {n} 件（{bytes} バイト）',
-    'ndef.confirmExisting.records': 'いまタグにある NDEF（{n} 件）は消えます',
-    'ndef.confirmExisting.empty': 'いまタグの NDEF は空です',
-    'ndef.confirmExisting.none': 'いまタグに NDEF はありません',
-    'ndef.confirmExisting.invalid': 'いまタグにある内容は NDEF として解読できません（置き換えます）',
+    'ndef.confirmExisting.records': '現在タグにある NDEF（{n} 件）は消えます',
+    'ndef.confirmExisting.empty': '現在、タグの NDEF は空です',
+    'ndef.confirmExisting.none': '現在、タグに NDEF はありません',
+    'ndef.confirmExisting.invalid': '現在タグにある内容は NDEF として解読できません（置き換えます）',
     'ndef.confirmPages': '書き換えるページ: {n}',
     'ndef.confirmBlocks': '書き換えるブロック: {n}',
-    'ndef.eraseTitle': 'タグの NDEF を消去します',
+    'ndef.eraseTitle': 'タグの NDEF を消去しますか？',
     'ndef.eraseConfirm': 'NDEF を消去する',
     'ndef.eraseMessage':
       'タグ {uid}（{kind}）の NDEF を空にします。URL などのレコードはすべて消えます（バックアップがあれば「バックアップ・複製」で戻せます）。UID は変わりません。',
@@ -207,7 +207,7 @@ export default defineMessages({
 
     // --- placeholders (issue templates) ---
     'ndef.placeholders': 'プレースホルダ',
-    'ndef.placeholdersHint': '発行時にタグごとに置き換わります。入力欄にカーソルを置いてクリックで挿入。',
+    'ndef.placeholdersHint': '発行するときに、タグごとの値に置き換わります。入力欄にカーソルを置いてからクリックすると、挿入されます。',
     'ndef.ph.seq': '連番',
     'ndef.ph.seqPad': '連番（桁そろえ）',
     'ndef.ph.uid': 'タグ UID',

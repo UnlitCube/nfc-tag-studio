@@ -84,6 +84,15 @@ export const IDENTIFY_RETRY_MS: readonly number[] = [300, 600, 1200];
  * status keeps showing the error meanwhile (no flicker, no "identify" busy).
  */
 export const IDENTIFY_SLOW_RETRY_MS: readonly number[] = [2500, 5000, 10_000];
+/**
+ * The last quick attempt failed with CARD_REMOVED (the tag left while we talked
+ * to it, e.g. SCARD_W_REMOVED_CARD) although the reader's last poll still said
+ * "present": wait this long - longer than one PC/SC poll (300 ms) - and try once
+ * more before concluding 'error'. A tag that is really gone is reported removed
+ * meanwhile and the status goes straight to "place a tag", without flashing
+ * "cannot be read" (2026-11-13 live check on the PaSoRi: 0.15 s red flash).
+ */
+export const REMOVED_GRACE_MS = 500;
 /** reidentify() resolves at the latest after this long. */
 const SETTLE_TIMEOUT_MS = 10_000;
 /**
@@ -135,6 +144,8 @@ interface ReaderSlot {
   settling: boolean;
   /** Slow background re-checks done since the last (re)start of detection. */
   slow: number;
+  /** The REMOVED_GRACE_MS extra attempt was already given in this round. */
+  removedGrace: boolean;
   /**
    * Re-checking after a possible swap (card-changed) or a setting change: the UID
    * that was on the reader. The old card stays shown until the check ends; the
@@ -316,6 +327,7 @@ export function createNfcService(deps: NfcServiceDeps, init: NfcServiceInit = {}
     let cardState: CardState = 'no-reader';
     let card: CardInfo | null = null;
     let cardError: ErrorCode | null = null;
+    let cardRetrying = false;
     if (act.name) {
       const slot = slots.get(act.name);
       if (!slot) {
@@ -336,6 +348,9 @@ export function createNfcService(deps: NfcServiceDeps, init: NfcServiceInit = {}
         cardError = slot.error ?? 'READ_FAILED';
       } else {
         cardState = 'detecting';
+        // An attempt already failed: the tag answers poorly (at the edge of the
+        // field, or still moving). The UI asks to hold it still in the middle.
+        cardRetrying = slot.attempt > 0;
       }
     }
     return {
@@ -350,6 +365,7 @@ export function createNfcService(deps: NfcServiceDeps, init: NfcServiceInit = {}
       card,
       cardState,
       cardError,
+      cardRetrying,
       ignoredRealReader: act.ignoredReal,
       busy: issueBusy ?? opBusy,
       simulator: sim.state,
@@ -501,6 +517,7 @@ export function createNfcService(deps: NfcServiceDeps, init: NfcServiceInit = {}
       timer: null,
       settling: false,
       slow: 0,
+      removedGrace: false,
       confirmUid: null,
       pendingUid: null,
       changedAt: now,
@@ -539,6 +556,7 @@ export function createNfcService(deps: NfcServiceDeps, init: NfcServiceInit = {}
     slot.generation++;
     slot.attempt = 0;
     slot.slow = 0;
+    slot.removedGrace = false;
     slot.confirmUid = confirmUid;
     if (confirmUid) slot.changedAt = Date.now();
     if (!isCandidate(reader)) {
@@ -632,6 +650,14 @@ export function createNfcService(deps: NfcServiceDeps, init: NfcServiceInit = {}
       return;
     }
 
+    // The tag left while we talked to it, but the reader has not reported the
+    // removal yet: give the next poll a chance before showing an error.
+    if (code === 'CARD_REMOVED' && present && !quiet && !slot.removedGrace) {
+      slot.removedGrace = true;
+      scheduleAttempt(reader, slot, REMOVED_GRACE_MS, false);
+      return;
+    }
+
     // Out of retries (or nothing to retry). A UID we read decides whether it is
     // still the tag we knew; without one we cannot tell: keep the placement,
     // decide on the next UID read.
@@ -696,6 +722,7 @@ export function createNfcService(deps: NfcServiceDeps, init: NfcServiceInit = {}
     slot.generation++;
     slot.attempt = 0;
     slot.slow = 0;
+    slot.removedGrace = false;
     conclude(slot, card.kind ? 'ready' : 'unsupported', card, card.kind ? null : 'UNSUPPORTED_TAG');
   }
 

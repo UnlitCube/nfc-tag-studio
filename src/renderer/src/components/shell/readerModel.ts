@@ -121,7 +121,8 @@ export type TagGuide =
   | { kind: 'writing' }
   | { kind: 'busy' }
   | { kind: 'place'; virtual: boolean }
-  | { kind: 'detecting' }
+  /** retrying: an attempt already failed (the tag answers poorly; ask to hold it still in the middle). */
+  | { kind: 'detecting'; retrying: boolean }
   | { kind: 'unsupported'; family: CardFamily; error: ErrorCode | null }
   | { kind: 'error'; error: ErrorCode }
   /** A supported tag is ready and no document is open. */
@@ -151,7 +152,7 @@ export function tagGuide(
     case 'absent':
       return { kind: 'place', virtual: !!activeOf(st)?.virtual };
     case 'detecting':
-      return { kind: 'detecting' };
+      return { kind: 'detecting', retrying: !!st.cardRetrying };
     case 'unsupported':
       return { kind: 'unsupported', family: cardFamily(st.card), error: st.cardError };
     case 'error':

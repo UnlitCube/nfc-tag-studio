@@ -56,14 +56,14 @@ export const ERROR_MESSAGES: Record<ErrorCode, { ja: string; en: string }> = {
     en: 'Writing failed. Re-place the tag in the centre of the reader and try again.',
   },
   VERIFY_FAILED: {
-    ja: '書き込んだ後に読み直した内容が一致しませんでした。ロック済みの領域か、タグの置き方が不安定な可能性があります。',
+    ja: '書き込んだ後に読み取り直した内容が、書き込んだ内容と一致しませんでした。ロック済みの領域か、タグの置き方が不安定な可能性があります。タグをリーダーの中央に置き直して、もう一度書き込んでください。',
     en: 'The data read back after writing did not match. The area may be locked, or the tag may not be sitting steadily on the reader.',
   },
   BUSY: {
     ja: '別の処理（一括発行など）を実行中です。終わってから、もう一度実行してください。',
     en: 'Another operation (such as batch issuing) is running. Try again when it has finished.',
   },
-  INVALID_INPUT: { ja: '入力内容が正しくありません。', en: 'Invalid input.' },
+  INVALID_INPUT: { ja: '入力内容が正しくありません。入力を確かめてください。', en: 'Invalid input. Check what you entered.' },
   FILE_ERROR: {
     ja: 'ファイルを読み書きできませんでした。別の場所や名前で試してください。',
     en: 'The file could not be read or written. Try another location or name.',

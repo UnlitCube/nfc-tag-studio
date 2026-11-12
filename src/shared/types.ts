@@ -130,6 +130,13 @@ export interface ReaderStatus {
   /** Why cardState is 'error' / 'unsupported' (e.g. CARD_UNRESPONSIVE, READER_IN_USE, UNSUPPORTED_TAG). null otherwise. */
   cardError: ErrorCode | null;
   /**
+   * cardState is 'detecting' and an attempt already failed (retrying): the tag
+   * answers poorly - at the edge of the reader, or still moving. The UI asks to
+   * hold it still in the middle of the reader (2026-11-13 live check). Always
+   * set by main; optional only so older fixtures compile.
+   */
+  cardRetrying?: boolean;
+  /**
    * Name of a real contactless reader that currently holds a tag while the
    * virtual reader takes precedence ('auto-virtual'): that real tag is NOT used.
    * The UI must say so (CARD-1). null otherwise.

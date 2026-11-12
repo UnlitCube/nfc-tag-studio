@@ -70,7 +70,7 @@ export default defineMessages({
     'issue.csv.columns': '列: {cols}',
     'issue.csv.hint': '1 行につき 1 枚のタグを発行します。1 行目は見出しです',
     'issue.csv.startRow': '開始する行',
-    'issue.csv.startRow.hint': '見出しを除いて何行目から発行するか（1〜{rows}）',
+    'issue.csv.startRow.hint': '見出しを除いて、何行目から発行するかを指定します（1〜{rows}）',
 
     // --- options ---
     'issue.options': 'オプション',
@@ -127,10 +127,10 @@ export default defineMessages({
     'issue.check.bad-password': 'パスワードは 16 進数 8 桁、PACK は 16 進数 4 桁で入力してください',
     'issue.check.password-mismatch': 'パスワードと「パスワード（確認）」が一致しません。同じパスワードを 2 回入力してください',
     'issue.check.protect-storage': 'いま使っているリーダーはストレージ方式（Sony PaSoRi など）で、パスワード認証ができません。保護したタグは、このリーダーでは後から書き換えられなくなります',
-    'issue.check.protect-reader-unknown': 'パスワードで保護したタグは、Sony PaSoRi などのストレージ方式のリーダーでは書き換えられません（パスワード認証ができないため）。タグを置くと、いまのリーダーの方式を確かめます',
+    'issue.check.protect-reader-unknown': 'パスワードで保護したタグは、Sony PaSoRi などのストレージ方式のリーダーでは書き換えられません（パスワード認証ができないため）。タグを置くと、使用中のリーダーの方式を確かめます',
     'issue.check.ndef-mifare': 'MIFARE Classic は、NDEF 用に初期化したタグ（MAD があるタグ）にだけ書き込めます。初期化していないタグは失敗します',
-    'issue.check.virtual': '仮想リーダー（試用）に書き込みます。実機のタグには書き込みません',
-    'issue.check.virtual-ignored': '仮想リーダー（試用）が有効なため、{name} の上のタグは使いません。実機のタグに発行するときは「仮想リーダーをオフにする」を押してください。仮想リーダーで試すときは、{name} の上のタグを離してください',
+    'issue.check.virtual': '仮想リーダー（お試し）に書き込みます。実機のタグには書き込みません',
+    'issue.check.virtual-ignored': '仮想リーダー（お試し）が有効なため、{name} の上のタグは使いません。実機のタグに発行するときは「仮想リーダーをオフにする」を押してください。仮想リーダーで試すときは、{name} の上のタグを離してください',
     'issue.check.kind-differs': 'リーダーの上のタグは {cardKind} です。発行するタグの種類は {kind} になっています。種類の違うタグは書き込まずにスキップします',
     'issue.check.tag-on-reader': 'リーダーの上にタグ（UID {uid}）が置かれています。このタグには書き込みません。始めたら、いったん離してください',
     'issue.check.tag-on-reader-unknown': 'リーダーの上にタグが置かれています。このタグには書き込みません。始めたら、いったん離してください',
@@ -145,7 +145,7 @@ export default defineMessages({
 
     // --- reader line ---
     'issue.reader.using': '使用中のリーダー: {name}',
-    'issue.reader.virtual': '仮想リーダー（試用）',
+    'issue.reader.virtual': '仮想リーダー（お試し）',
     'issue.reader.none': '使えるリーダーがありません',
     'issue.reader.state.no-reader': 'リーダーなし',
     'issue.reader.state.absent': 'タグなし',
@@ -242,7 +242,7 @@ export default defineMessages({
     'issue.previous': '直前のタグ: {text}',
 
     // --- virtual reader controls on the running screen (R-ISSUE-6) ---
-    'issue.virtual.title': '仮想リーダー（試用）のタグ',
+    'issue.virtual.title': '仮想リーダー（お試し）のタグ',
     'issue.virtual.hint': '仮想のタグは、ここで置いたり離したりできます。「新しい空のタグを置く」で、次に発行するタグを置けます',
     'issue.virtual.clearHint': '始める前から仮想リーダーに置かれていたタグには書き込みません。「仮想タグを離す」を押すと、発行が始まります',
     'issue.virtual.present': '仮想タグを置いています',

@@ -5,15 +5,15 @@ import { defineMessages } from './define';
 export default defineMessages({
   ja: {
     'schema.title': 'データスキーマ',
-    'schema.subtitle': 'ID の採番レイアウトを GUI で設計し、JSON（*.nfcschema）で保存します。',
+    'schema.subtitle': 'タグに書く ID（社員番号など）の位置と形式を決めて、ファイル（.nfcschema）に保存します。',
     'schema.note':
       'このスキーマはタグのデータ領域だけに書き込みます。UID（製造番号）は読み取り専用で、スキーマでは変更・複製できません。複製されるのはデータ領域だけです。',
 
     'schema.new': '新規作成',
-    'schema.import': 'JSON を開く',
-    'schema.export': 'JSON に書き出し',
+    'schema.import': 'スキーマのファイルを開く',
+    'schema.export': 'ファイルに書き出す',
     'schema.save': 'スキーマを保存',
-    'schema.toIssue': '発行へ',
+    'schema.toIssue': '一括発行で使う',
     'schema.unsaved': '未保存の変更があります',
 
     'schema.list.title': 'スキーマ一覧',
@@ -23,7 +23,7 @@ export default defineMessages({
     'schema.list.fields': '{n} フィールド',
 
     'schema.empty.title': 'スキーマを選ぶか作成してください',
-    'schema.empty.body': '社員証 ID などの連番レイアウトを GUI で設計し、発行に使えます。',
+    'schema.empty.body': '社員証の ID などを、タグのどの位置にどの形式で書くかを決めます。作ったスキーマは、一括発行で使えます。',
 
     'schema.newDialog.title': '新しいスキーマ',
     'schema.newDialog.name': 'スキーマ名',
@@ -37,7 +37,7 @@ export default defineMessages({
     'schema.meta.name': 'スキーマ名',
     'schema.meta.description': '説明',
     'schema.meta.tagKinds': '対象タグ種別',
-    'schema.meta.tagKindsHelp': 'このレイアウトを使うタグの種類。先頭のタグで容量と配置を検証します。',
+    'schema.meta.tagKindsHelp': 'このスキーマを使うタグの種類です。容量と配置は、先頭の種類で確かめます。',
 
     'schema.area.title': '配置',
     'schema.area.mode': '方式',
@@ -52,7 +52,7 @@ export default defineMessages({
     'schema.area.type': 'タイプ',
     'schema.area.rawHelp':
       'スキーマのバイト列を、データ領域の指定した{unit}から書きます（MIFARE はブロック 0 とセクタトレーラを自動で飛ばします）。',
-    'schema.area.ndefHelp': 'スキーマのバイト列を 1 つの NDEF レコードのペイロードとして書きます（スマホでも読めます）。',
+    'schema.area.ndefHelp': 'スキーマのバイト列を、1 つの NDEF レコードのデータとして書き込みます（スマートフォンでも読めます）。',
 
     'schema.fields.title': 'フィールド',
     'schema.fields.add': 'フィールドを追加',
@@ -93,7 +93,7 @@ export default defineMessages({
     'schema.source.sequence': '連番',
     'schema.source.csv': 'CSV の列',
     'schema.source.now': '現在日時',
-    'schema.source.uid': 'UID の写し',
+    'schema.source.uid': 'タグの UID',
     'schema.source.computed': '自動計算',
     'schema.source.fixedValue': '値',
     'schema.source.inputDefault': '既定値',
@@ -103,7 +103,7 @@ export default defineMessages({
     'schema.source.uidFull': 'UID 全体',
     'schema.source.uidLast4': '末尾 4 バイト',
     'schema.source.uidReadonly':
-      'UID は読み取り専用です。ここでは UID の写しをデータ領域に参照として置くだけで、UID を変更・複製することはできません。',
+      'UID は読み取り専用です。ここでは UID の値をデータ領域に書き写すだけで、タグの UID を変えたり複製したりはできません。',
 
     'schema.endian.be': 'ビッグエンディアン',
     'schema.endian.le': 'リトルエンディアン',
@@ -118,8 +118,8 @@ export default defineMessages({
     'schema.map.size': '{n} バイト',
     'schema.map.capacity': '／ タグ容量 {n} バイト',
     'schema.map.overlap': 'フィールドが重なっています',
-    'schema.map.empty': 'フィールドを追加するとここに占有が表示されます。',
-    'schema.map.tooBig': 'レイアウトが大きいためバイト表示を省略しました。',
+    'schema.map.empty': 'フィールドを追加すると、使うバイトの位置がここに表示されます。',
+    'schema.map.tooBig': 'レイアウトが大きいため、バイトごとの表示を省略しました。',
     'schema.map.byte': '{offset} バイト目',
 
     'schema.preview.title': 'プレビュー',
@@ -148,15 +148,15 @@ export default defineMessages({
     'schema.issue.PROTECTED_AREA': '保護領域',
     'schema.issue.VALUE': '値が不正',
 
-    'schema.delete.title': 'スキーマを削除',
+    'schema.delete.title': 'スキーマを削除しますか？',
     'schema.delete.message': 'このスキーマを削除します。元に戻せません。',
 
     'schema.toast.saved': 'スキーマを保存しました',
-    'schema.toast.exported': 'JSON に書き出しました',
+    'schema.toast.exported': 'ファイルに書き出しました',
     'schema.toast.imported': 'スキーマのファイルを開きました',
     'schema.toast.importFailed': 'スキーマのファイルを開けませんでした',
     'schema.toast.needName': 'スキーマ名を入力してください',
-    'schema.toast.handoffSaved': '保存して発行画面へ移動しました',
+    'schema.toast.handoffSaved': '保存して、一括発行の画面に移りました',
   },
   en: {
     'schema.title': 'Data schema',

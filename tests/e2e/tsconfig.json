@@ -6,5 +6,5 @@
     "noEmit": true,
     "baseUrl": "../.."
   },
-  "include": ["./**/*.ts", "../../playwright.config.ts"]
+  "include": ["./**/*.ts", "../hw/**/*.ts", "../../playwright.config.ts", "../../playwright.hw.config.ts"]
 }

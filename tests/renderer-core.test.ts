@@ -280,7 +280,7 @@ describe('readCurrentTag', () => {
     img.unitStatus[10] = 'error';
     const lines = ops.readSummaryLines(img, 'ja');
     expect(lines.some((l) => l.startsWith('2 ページは保護されていて'))).toBe(true);
-    expect(lines.some((l) => l.startsWith('1 ページは読み取りが途切れました'))).toBe(true);
+    expect(lines.some((l) => l.startsWith('1 ページは読み取りの途中で途切れました'))).toBe(true);
   });
 
   it('FeliCa says IDm, not UID', () => {

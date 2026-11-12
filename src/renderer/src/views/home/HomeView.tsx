@@ -433,7 +433,7 @@ function TagGuideBlock({ guide, onRead, onTrial }: { guide: TagGuide; onRead: ()
     case 'detecting':
       return (
         <GuideFrame tone="info" icon={Loader2} spin title={t('home.detecting.title')}>
-          <p>{t('home.detecting.body')}</p>
+          <p>{t(guide.retrying ? 'home.detecting.retry' : 'home.detecting.body')}</p>
         </GuideFrame>
       );
     case 'unsupported':

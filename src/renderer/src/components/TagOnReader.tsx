@@ -106,7 +106,7 @@ export function TagOnReader({ compact = false, readThis = true }: { compact?: bo
       ? t('reader.selectedMissing', { name: reader?.selectedReader ?? '' })
       : errorMessage(serviceDown ? 'NO_SERVICE' : 'NO_READER', lang);
   } else if (state === 'absent') hint = t('reader.hint.absent');
-  else if (state === 'detecting') hint = t('reader.hint.detecting');
+  else if (state === 'detecting') hint = t(reader?.cardRetrying ? 'reader.hint.detectingRetry' : 'reader.hint.detecting');
   else if (state === 'unsupported') hint = reader?.cardError && reader.cardError !== 'UNSUPPORTED_TAG' ? errorMessage(reader.cardError, lang) : t('reader.hint.unsupported');
   else if (state === 'error') hint = reader?.cardError ? errorMessage(reader.cardError, lang) : t('reader.hint.error');
 

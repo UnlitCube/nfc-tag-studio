@@ -105,8 +105,8 @@ export default defineMessages({
     'op.read.targetFailed': '書き込み先のタグを読み取れませんでした',
     'op.read.summary': '{kind} · {idName} {uid}',
     'op.read.denied': '{count}は保護されていて読めませんでした（パスワードか鍵が必要です）。',
-    'op.read.unread': '{count}は読み取っていません（0 で表示しています）。',
-    'op.read.error': '{count}は読み取りが途切れました（0 で表示しています）。タグを置いたまま、もう一度読み取ってください。',
+    'op.read.unread': '{count}は読み取っていません（0 として表示しています）。',
+    'op.read.error': '{count}は読み取りの途中で途切れました（0 として表示しています）。タグを置いたまま、もう一度読み取ってください。',
     'op.read.incomplete.title': '読み取りが途中で途切れました',
     'op.read.incomplete.message':
       '{count}を読み取れず、0 で埋めてあります。このまま開くと、0 の部分を本当の内容と見分けられません。タグをリーダーの中央に置いたまま、もう一度読み取ってください。',
@@ -119,7 +119,7 @@ export default defineMessages({
     // --- writing (lib/ops) ---
     'op.write.nothing': '書き込む変更はありません',
     'op.write.confirm.target': '書き込み先: {kind} · {idName} {uid}',
-    'op.write.confirm.targetUnknown': '書き込み先: いまリーダーの上にあるタグ',
+    'op.write.confirm.targetUnknown': '書き込み先: リーダーの上に置かれているタグ',
     'op.write.confirm.copyCard': '別のタグへ書き込みます（複製）。開いている文書は {idName} {uid} のタグから読み取った内容です。{idName} は複製されません。',
     'op.write.confirm.otherCard': '開いている文書のタグ（{idName} {uid}）とは別のタグへ書き込みます。',
     'op.write.confirm.other': '読み取ったときとは別のタグへ書き込みます。書き込み先の {idName} を確かめてください。',
@@ -128,7 +128,7 @@ export default defineMessages({
     'op.write.confirm.reactivate': '保護の設定は、書き込んだあとタグをいったんリーダーから離して、置き直すと有効になります。',
     'op.write.confirm.keepPlaced': '書き込みが終わるまで、タグをリーダーの上に置いたままにしてください。',
     'op.write.done': 'タグに書き込みました',
-    'op.write.doneVerified': '{count}を書き込み、読み直して一致を確かめました（照合 OK）。',
+    'op.write.doneVerified': '{count}を書き込み、読み取り直して内容が一致することを確かめました（照合 OK）。',
     'op.write.doneUnverified': '{count}を書き込みました（照合はしていません）。',
     'op.write.partialTitle': '一部を書き込めませんでした',
     'op.write.failedTitle': 'タグに書き込めませんでした',
@@ -142,7 +142,7 @@ export default defineMessages({
     'op.write.writtenUnverifiedTitle': '書き込みました（照合の前にタグが離れました）',
     'op.write.writtenUnverified': '{count}を書き込みました。照合はできていません。タグを置いて読み取ると確かめられます。',
     'op.write.dropped':
-      '{units} の変更は書き込まれていません。開いている文書は書き込んだタグに替わったため、この変更は残っていません。',
+      '{units} の変更は書き込まれていません。開いている文書が、書き込んだタグの内容に置き換わったため、この変更は残っていません。',
     'op.write.kept': '書き込めなかった変更は、未書き込みの変更として残してあります。',
     'op.write.thrownNothing': 'タグには何も書き込まれていません。未書き込みの変更は、そのまま残してあります。',
     'op.write.thrownMaybe': '未書き込みの変更は、そのまま残してあります。タグを置いたまま読み取り直すと、いまの内容を確かめられます。',
@@ -180,6 +180,7 @@ export default defineMessages({
     'reader.hint.absent':
       'タグをリーダーの上に置いてください。読み取りが終わるまで、置いたままにしてください（改札のように一瞬タッチするだけでは読めません）。',
     'reader.hint.detecting': 'タグを確認しています。置いたままにしてください。',
+    'reader.hint.detectingRetry': 'うまく読み取れません。タグをリーダーの中央に置き、動かさないでください。',
     'reader.hint.unsupported':
       'このタグの種類には対応していません。対応しているのは NTAG213/215/216・MIFARE Classic 1K/4K・FeliCa Lite-S です。',
     'reader.hint.error': 'タグを読み取れません。リーダーの中央に置き直してください（金属の上や、2 枚重ねでは読めないことがあります）。',
@@ -390,6 +391,7 @@ export default defineMessages({
     'reader.hint.absent':
       'Place the tag on the reader and keep it there until reading has finished (a quick tap, like at a ticket gate, is not enough).',
     'reader.hint.detecting': 'Checking the tag. Keep it on the reader.',
+    'reader.hint.detectingRetry': 'The tag is not answering well. Place it in the centre of the reader and hold it still.',
     'reader.hint.unsupported':
       'This tag type is not supported. Supported types: NTAG213/215/216, MIFARE Classic 1K/4K and FeliCa Lite-S.',
     'reader.hint.error': 'Cannot read the tag. Place it again in the centre of the reader (it may not read on metal or when two tags overlap).',

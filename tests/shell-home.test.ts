@@ -133,7 +133,9 @@ describe('tagGuide (FIRST-1..4, CARD-3, CARD-9, CARD-12, FLOW-10)', () => {
 
   it('one state per cardState, never "place a tag" while a tag is present but unidentified', () => {
     expect(tagGuide(pasoriActive({ cardState: 'absent' }), null, ops).kind).toBe('place');
-    expect(tagGuide(pasoriActive({ cardState: 'detecting' }), null, ops).kind).toBe('detecting');
+    expect(tagGuide(pasoriActive({ cardState: 'detecting' }), null, ops)).toEqual({ kind: 'detecting', retrying: false });
+    // an attempt already failed: the home screen asks to hold the tag still in the middle
+    expect(tagGuide(pasoriActive({ cardState: 'detecting', cardRetrying: true }), null, ops)).toEqual({ kind: 'detecting', retrying: true });
     expect(tagGuide(pasoriActive({ cardState: 'error', cardError: 'READER_IN_USE' }), null, ops)).toEqual({ kind: 'error', error: 'READER_IN_USE' });
     expect(tagGuide(pasoriActive({ cardState: 'error' }), null, ops)).toEqual({ kind: 'error', error: 'CARD_UNRESPONSIVE' });
     const unsup = tagGuide(pasoriActive({ cardState: 'unsupported', card: card('04A1', null), cardError: 'UNSUPPORTED_TAG' }), null, ops);

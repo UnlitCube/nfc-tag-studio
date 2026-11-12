@@ -33,7 +33,7 @@ vi.mock('../src/main/nfc/pcsc', () => ({
 }));
 
 // Imported after the mock is registered (vi.mock is hoisted).
-import { atrSaysNotType2, createNfcService, IDENTIFY_RETRY_MS, IDENTIFY_SETTLE_MS, IDENTIFY_SLOW_RETRY_MS } from '../src/main/nfc/service';
+import { atrSaysNotType2, createNfcService, IDENTIFY_RETRY_MS, IDENTIFY_SETTLE_MS, IDENTIFY_SLOW_RETRY_MS, REMOVED_GRACE_MS } from '../src/main/nfc/service';
 
 const TOKEN = 'FS USB Token 0';
 const PASORI = 'Sony FeliCa Port/PaSoRi 3.0 0';
@@ -366,6 +366,60 @@ describe('identification retries and errors (CARD-3, FIRST-1, WALK-3)', () => {
     await svc.refreshReaders();
     await settle(50);
     expect(svc.getStatus().cardState).toBe('ready');
+  });
+
+  it('cardRetrying is set only while retrying after a failed attempt (2026-11-13 live check)', async () => {
+    const f = devPcLayout();
+    await startService(f);
+    f.failNext.set(PASORI, ['READ_FAILED', 'READ_FAILED']);
+    await f.place(PASORI, 'NTAG215');
+    expect(svc.getStatus()).toMatchObject({ cardState: 'detecting', cardRetrying: false });
+    await settle(); // first attempt fails
+    expect(svc.getStatus()).toMatchObject({ cardState: 'detecting', cardRetrying: true });
+    await vi.advanceTimersByTimeAsync(IDENTIFY_RETRY_MS[0] + IDENTIFY_RETRY_MS[1] + 20);
+    expect(svc.getStatus()).toMatchObject({ cardState: 'ready', cardRetrying: false });
+    f.lift(PASORI);
+    await vi.advanceTimersByTimeAsync(0);
+    expect(svc.getStatus()).toMatchObject({ cardState: 'absent', cardRetrying: false });
+  });
+
+  it('a tag leaving during the last attempt goes to "absent" without an "error" flash', async () => {
+    const f = devPcLayout();
+    await startService(f);
+    f.failNext.set(PASORI, Array.from({ length: 1 + IDENTIFY_RETRY_MS.length }, () => 'CARD_REMOVED' as ErrorCode));
+    await f.place(PASORI, 'NTAG215');
+    await settle(IDENTIFY_SETTLE_MS + IDENTIFY_RETRY_MS.reduce((a, b) => a + b, 0) + 20);
+    // every quick attempt failed with CARD_REMOVED, but the reader still says "present"
+    expect(f.connects.filter((n) => n === PASORI)).toHaveLength(1 + IDENTIFY_RETRY_MS.length);
+    expect(svc.getStatus().cardState).toBe('detecting');
+    // the reader reports the removal on its next poll
+    await vi.advanceTimersByTimeAsync(150);
+    f.lift(PASORI);
+    await vi.advanceTimersByTimeAsync(REMOVED_GRACE_MS);
+    expect(svc.getStatus().cardState).toBe('absent');
+    expect(seen.some((st) => st.cardState === 'error')).toBe(false);
+  });
+
+  it('a tag that stays after the last CARD_REMOVED gets one more try, then the error', async () => {
+    const f = devPcLayout();
+    await startService(f);
+    f.failNext.set(PASORI, Array.from({ length: 2 + IDENTIFY_RETRY_MS.length }, () => 'CARD_REMOVED' as ErrorCode));
+    await f.place(PASORI, 'NTAG215');
+    await settle(IDENTIFY_SETTLE_MS + IDENTIFY_RETRY_MS.reduce((a, b) => a + b, 0) + 20);
+    expect(svc.getStatus().cardState).toBe('detecting');
+    await vi.advanceTimersByTimeAsync(REMOVED_GRACE_MS + 20);
+    expect(f.connects.filter((n) => n === PASORI)).toHaveLength(2 + IDENTIFY_RETRY_MS.length);
+    expect(svc.getStatus()).toMatchObject({ cardState: 'error', cardError: 'CARD_REMOVED' });
+
+    // the same with one failure less: the extra try reads the tag
+    await svc.dispose();
+    const g = devPcLayout();
+    await startService(g);
+    g.failNext.set(PASORI, Array.from({ length: 1 + IDENTIFY_RETRY_MS.length }, () => 'CARD_REMOVED' as ErrorCode));
+    await g.place(PASORI, 'NTAG215');
+    await settle(IDENTIFY_SETTLE_MS + IDENTIFY_RETRY_MS.reduce((a, b) => a + b, 0) + REMOVED_GRACE_MS + 40);
+    expect(svc.getStatus()).toMatchObject({ cardState: 'ready', card: { kind: 'NTAG215' } });
+    expect(seen.some((st) => st.cardState === 'error')).toBe(false);
   });
 
   it('removal is tracked by presence: waitForRemoval ends even when identification failed', async () => {
