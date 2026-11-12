@@ -31,6 +31,89 @@
 .issue-status-sub {
   color: var(--text-dim);
   font-size: var(--fs-md);
+  max-width: 60ch;
+}
+
+/* running panel: the result of the tag just handled stays big until the next tag */
+.issue-big-status {
+  min-height: 260px;
+}
+.issue-status-tag {
+  font-size: var(--fs-md);
+  color: var(--text-dim);
+}
+.issue-status-reason {
+  font-size: var(--fs-heading);
+  color: var(--text);
+  max-width: 60ch;
+}
+.issue-status-after {
+  font-size: var(--fs-heading);
+  font-weight: 700;
+  color: var(--text);
+  max-width: 60ch;
+}
+.issue-status-prev {
+  margin-top: var(--space-2);
+}
+.issue-pulse {
+  animation: issue-pulse calc(var(--dur) * 6) ease-in-out infinite alternate;
+}
+@keyframes issue-pulse {
+  from {
+    opacity: 1;
+  }
+  to {
+    opacity: 0.45;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .issue-pulse {
+    animation: none;
+  }
+}
+
+/* settings screen */
+.issue-reader-line {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+.issue-reader-row {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+.issue-reader-problem {
+  color: var(--danger);
+  font-size: var(--fs-md);
+}
+.issue-block-reason {
+  color: var(--danger);
+  font-size: var(--fs-small);
+  max-width: 36ch;
+  text-align: right;
+}
+.issue-check-list {
+  margin: 0;
+  padding-left: var(--space-5);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+.issue-check-sublist {
+  margin: var(--space-1) 0 0;
+  padding-left: var(--space-5);
+  font-size: var(--fs-small);
+}
+.issue-strong {
+  font-weight: 700;
+}
+.issue-stack-sm {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
 }
 
 /* preview + log tables scroll inside their card */

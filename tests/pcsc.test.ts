@@ -36,6 +36,13 @@ import {
   SCARD_E_TIMEOUT,
   SCARD_E_CANCELLED,
   SCARD_E_INVALID_PARAMETER,
+  SCARD_E_NOT_TRANSACTED,
+  SCARD_W_UNRESPONSIVE_CARD,
+  SCARD_W_UNSUPPORTED_CARD,
+  serviceDownMeansNoReaders,
+  eventCountOf,
+  cardSwapSuspected,
+  effectiveInUse,
 } from '../src/main/nfc/pcsc/pure';
 
 // Helper: UTF-16 code units for an ASCII string.
@@ -171,9 +178,15 @@ describe('PC/SC error -> OpError mapping', () => {
     [SCARD_E_NO_SMARTCARD, 'NO_CARD'],
     [SCARD_W_REMOVED_CARD, 'CARD_REMOVED'],
     [SCARD_W_RESET_CARD, 'CARD_REMOVED'],
-    [SCARD_E_SHARING_VIOLATION, 'BUSY'],
+    // 2026-11-12 UX audit FIRST-10 / CARD-11: another app holding the reader is
+    // READER_IN_USE ("close the other app"), not BUSY ("wait for this app").
+    [SCARD_E_SHARING_VIOLATION, 'READER_IN_USE'],
+    // A tag that does not answer must be re-placed, not called "unsupported".
+    [SCARD_W_UNRESPONSIVE_CARD, 'CARD_UNRESPONSIVE'],
     [SCARD_E_CARD_UNSUPPORTED, 'UNSUPPORTED_TAG'],
+    [SCARD_W_UNSUPPORTED_CARD, 'UNSUPPORTED_TAG'],
     [SCARD_E_TIMEOUT, 'READ_FAILED'],
+    [SCARD_E_NOT_TRANSACTED, 'READ_FAILED'],
     [SCARD_E_CANCELLED, 'CANCELLED'],
     [SCARD_E_INVALID_PARAMETER, 'INTERNAL'],
   ];
@@ -193,5 +206,44 @@ describe('PC/SC error -> OpError mapping', () => {
 
   it('defaults unknown codes to INTERNAL', () => {
     expect(pcscErrorCode(0x80100099)).toBe('INTERNAL');
+  });
+});
+
+describe('service down = no reader on Windows (CARD-8)', () => {
+  it('treats NO_SERVICE / SERVICE_STOPPED as "no reader connected" only on win32', () => {
+    expect(serviceDownMeansNoReaders(asSignedLong(SCARD_E_NO_SERVICE), 'win32')).toBe(true);
+    expect(serviceDownMeansNoReaders(asSignedLong(SCARD_E_SERVICE_STOPPED), 'win32')).toBe(true);
+    // pcscd missing on Linux / macOS really is a missing service.
+    expect(serviceDownMeansNoReaders(asSignedLong(SCARD_E_NO_SERVICE), 'linux')).toBe(false);
+    expect(serviceDownMeansNoReaders(asSignedLong(SCARD_E_TIMEOUT), 'win32')).toBe(false);
+  });
+});
+
+describe('card swap detection from dwEventState (CARD-10 / ISSUE-14 / WALK-14)', () => {
+  it('reads the event counter from the upper 16 bits of dwEventState', () => {
+    // Measured on the dev PC (FS USB Token, card present): 0x00010422 -> count 1.
+    expect(eventCountOf(0x00010422)).toBe(1);
+    expect(eventCountOf(0x00030022)).toBe(3);
+    expect(eventCountOf(SCARD_STATE_PRESENT)).toBe(0);
+    expect(eventCountOf(0xffff0022)).toBe(0xffff);
+  });
+
+  it('suspects a swap when the counter or the ATR changed while the tag stayed present', () => {
+    const atrA = Uint8Array.from([0x3b, 0x8f, 0x80, 0x01, 0x03]);
+    const atrB = Uint8Array.from([0x3b, 0x8f, 0x80, 0x01, 0x11]);
+    expect(cardSwapSuspected({ atr: atrA, events: 1 }, { atr: atrA, events: 1 })).toBe(false);
+    expect(cardSwapSuspected({ atr: atrA, events: 1 }, { atr: atrA, events: 3 })).toBe(true);
+    expect(cardSwapSuspected({ atr: atrA, events: 1 }, { atr: atrB, events: 1 })).toBe(true);
+    // An unknown ATR (empty) or counter (null) never counts as a change.
+    expect(cardSwapSuspected({ atr: new Uint8Array(0), events: null }, { atr: atrB, events: 5 })).toBe(false);
+  });
+});
+
+describe('effectiveInUse (real PaSoRi 2026-11-13: our own read flashed "another app")', () => {
+  it('hides our own INUSE and a one-poll probe; reports a lasting foreign one', () => {
+    expect(effectiveInUse(true, true, 5)).toEqual({ inUse: false, streak: 0 });
+    expect(effectiveInUse(false, false, 3)).toEqual({ inUse: false, streak: 0 });
+    expect(effectiveInUse(true, false, 0)).toEqual({ inUse: false, streak: 1 });
+    expect(effectiveInUse(true, false, 1)).toEqual({ inUse: true, streak: 2 });
   });
 });

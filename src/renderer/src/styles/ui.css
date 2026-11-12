@@ -517,6 +517,20 @@
   z-index: 200;
   width: 380px;
   max-width: calc(100vw - 40px);
+  /* Only the toasts take clicks, never the gaps between them (D13). */
+  pointer-events: none;
+}
+/* A confirmation is open: the toasts sit under its backdrop (E2E-UX-2). */
+.toaster.is-behind {
+  z-index: 90;
+}
+.toaster > .toast {
+  pointer-events: auto;
+}
+.toast-count {
+  margin-left: var(--space-1);
+  font-weight: 400;
+  opacity: 0.8;
 }
 .toast {
   display: flex;
@@ -695,4 +709,170 @@
   border-style: solid;
   border-color: var(--accent);
   background: var(--accent-soft);
+}
+
+/* ---------- keep-alive view panes (App.tsx) ---------- */
+.view-pane {
+  height: 100%;
+  min-height: 0;
+}
+.view-pane[hidden] {
+  display: none;
+}
+
+/* ---------- the tag on the active reader (TagOnReader) ---------- */
+.tag-on-reader {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  min-width: 0;
+}
+.tag-on-reader-head {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  min-width: 0;
+}
+.tag-on-reader-compact {
+  flex-direction: row;
+  align-items: center;
+  flex-wrap: wrap;
+}
+.tag-on-reader .badge-info svg {
+  animation: spin 0.9s linear infinite;
+}
+.tag-on-reader-hint {
+  color: var(--text-dim);
+  font-size: var(--fs-small);
+}
+.tag-on-reader-hint.is-problem {
+  color: var(--danger);
+}
+.tag-on-reader-note {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  padding: var(--space-2) var(--space-3);
+  border-radius: var(--radius);
+  background: var(--info-soft);
+  font-size: var(--fs-small);
+}
+.tag-on-reader-note > svg {
+  flex: none;
+  color: var(--info);
+}
+.tag-on-reader-note.is-warn {
+  background: var(--warn-soft);
+}
+.tag-on-reader-note.is-warn > svg {
+  color: var(--warn);
+}
+
+/* ---------- last write result (LastWriteCallout) ---------- */
+.last-write {
+  position: relative;
+}
+.last-write .callout {
+  padding-right: calc(var(--space-4) + var(--control-h-sm));
+}
+.last-write-close {
+  position: absolute;
+  top: var(--space-2);
+  right: var(--space-2);
+}
+.last-write-body {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+.last-write-lines {
+  margin: 0;
+  padding-left: 1.2em;
+}
+.last-write-reactivate {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  margin-top: var(--space-1);
+  padding: var(--space-2) var(--space-3);
+  border-radius: var(--radius);
+  background: var(--surface);
+  border: 1px solid var(--warn);
+  color: var(--warn);
+  font-weight: 650;
+}
+.last-write-reactivate > svg {
+  flex: none;
+}
+.last-write-meta {
+  color: var(--text-dim);
+}
+/* The result of a write to another tag (R-WRITE-5): folded and quiet. */
+.last-write-other {
+  padding: var(--space-2) calc(var(--space-4) + var(--control-h-sm)) var(--space-2) var(--space-3);
+  border-radius: var(--radius);
+  border: 1px solid var(--border);
+  background: var(--surface-inset);
+  font-size: var(--fs-small);
+  color: var(--text-dim);
+}
+.last-write-other > summary {
+  cursor: pointer;
+}
+.last-write-other[open] > summary {
+  margin-bottom: var(--space-2);
+}
+.last-write.is-other .last-write-close {
+  top: 50%;
+  transform: translateY(-50%);
+}
+.last-write.is-other:has(.last-write-other[open]) .last-write-close {
+  top: var(--space-1);
+  transform: none;
+}
+
+/* ---------- confirm dialog: target tag + details ---------- */
+.confirm-target {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-2) var(--space-3);
+  border-radius: var(--radius);
+  background: var(--surface-inset);
+  border: 1px solid var(--border);
+  font-weight: 650;
+  word-break: break-word;
+}
+.confirm-target > svg {
+  flex: none;
+  color: var(--accent);
+}
+.confirm-details {
+  margin: 0;
+  padding-left: 1.2em;
+}
+
+/* ---------- folded technical details (toasts, start-up error) ---------- */
+.toast-detail {
+  white-space: pre-wrap;
+}
+.toast-technical,
+.init-error-technical {
+  margin-top: var(--space-1);
+  font-size: var(--fs-micro);
+}
+.toast-technical > summary,
+.init-error-technical > summary {
+  cursor: pointer;
+  opacity: 0.85;
+}
+.toast-technical > code,
+.init-error-technical > code {
+  display: block;
+  margin-top: 2px;
+  white-space: pre-wrap;
+  word-break: break-all;
+  opacity: 0.85;
 }

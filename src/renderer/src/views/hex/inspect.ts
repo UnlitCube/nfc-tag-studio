@@ -254,7 +254,7 @@ function ntagInspection(kind: TagKind, data: Uint8Array, unit: number, lang: Lan
       from: p.pwd * 4,
       to: p.pack * 4 + 3,
       fields: [
-        { bits: L(lang, 'PWD（4B）', 'PWD (4B)'), name: L(lang, 'パスワード', 'Password'), value: L(lang, '読み出すと 00', 'reads as 00'), meaning: L(lang, '32bit パスワード。読み出しでは常に 0 が返ります。', '32-bit password; always reads back as 0.'), tone: 'info' },
+        { bits: L(lang, 'PWD（4B）', 'PWD (4B)'), name: L(lang, 'パスワード', 'Password'), value: L(lang, '読み出すと 00', 'reads as 00'), meaning: L(lang, '32bit パスワード。読み出しでは常に 0 が返るため、いまの値は画面に出ません（工場出荷時は FFFFFFFF）。保護を始めるときは「パラメータ（フラグ）編集」で決めます。', '32-bit password. It always reads back as 0, so the current value is never shown (FFFFFFFF from the factory). Decide it under "Parameters / flags" when turning protection on.'), tone: 'info' },
         { bits: L(lang, 'PACK（2B）', 'PACK (2B)'), name: L(lang, '応答コード', 'Password ACK'), value: '', meaning: L(lang, '認証成功時に返る 16bit 応答。', '16-bit value returned on a successful auth.') },
       ],
     });
@@ -276,7 +276,7 @@ function mifareInspection(data: Uint8Array, unit: number, lang: LanguageSetting)
       fields: [
         { bits: L(lang, 'バイト0–3', 'byte 0–3'), name: 'UID', value: `${hex2(data[off])}${hex2(data[off + 1])}${hex2(data[off + 2])}${hex2(data[off + 3])}`, meaning: L(lang, '製造時に固定された読み取り専用の UID。', 'Read-only UID fixed at manufacture.'), tone: 'info' },
         { bits: L(lang, 'バイト4', 'byte 4'), name: 'BCC', value: `${hex2(data[off + 4])}${data[off + 4] === bcc ? '' : ' !'}`, meaning: L(lang, 'UID のチェックバイト（XOR）。', 'UID checksum (XOR of the 4 UID bytes).'), tone: data[off + 4] === bcc ? 'ok' : 'warn' },
-        { bits: L(lang, 'バイト5', 'byte 5'), name: 'SAK', value: hex2(data[off + 5]), meaning: L(lang, 'カードの種別応答（08=1K, 18=4K 相当）。', 'Select acknowledge (08=1K, 18=4K).') },
+        { bits: L(lang, 'バイト5', 'byte 5'), name: 'SAK', value: hex2(data[off + 5]), meaning: L(lang, 'タグの種別応答（08=1K, 18=4K 相当）。', 'Select acknowledge (08=1K, 18=4K).') },
         { bits: L(lang, 'バイト6–7', 'byte 6–7'), name: 'ATQA', value: `${hex2(data[off + 6])}${hex2(data[off + 7])}`, meaning: L(lang, 'Answer To reQuest（種別）。', 'Answer to request type A.') },
       ],
     });

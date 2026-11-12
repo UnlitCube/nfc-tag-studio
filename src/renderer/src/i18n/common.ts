@@ -7,20 +7,6 @@ export default defineMessages({
     'app.name': 'NFC Tag Studio',
     'app.tagline': '自組織で管理する NFC タグの発行・編集ツール',
 
-    'nav.home': '読み取り',
-    'nav.issue': '発行',
-    'nav.ndef': 'NDEF 編集',
-    'nav.schema': 'データスキーマ',
-    'nav.hex': 'バイナリ編集',
-    'nav.backup': 'バックアップ・複製',
-    'nav.log': '発行台帳',
-    'nav.keys': 'MIFARE 鍵',
-    'nav.help': 'ヘルプ',
-    'nav.settings': '設定',
-    'nav.group.work': '作業',
-    'nav.group.design': '設計',
-    'nav.group.manage': '管理',
-
     'common.ok': 'OK',
     'common.cancel': 'キャンセル',
     'common.close': '閉じる',
@@ -48,7 +34,7 @@ export default defineMessages({
     'common.no': 'いいえ',
     'common.none': 'なし',
     'common.unknown': '不明',
-    'common.loading': '読み込み中…',
+    'common.loading': '準備しています…',
     'common.optional': '任意',
     'common.required': '必須',
     'common.learnMore': '詳しく',
@@ -57,7 +43,7 @@ export default defineMessages({
     'common.pages': '{n} ページ',
     'common.blocks': '{n} ブロック',
     'common.export': '書き出し',
-    'common.import': '読み込み',
+    'common.import': '取り込み',
     'common.search': '検索',
 
     'tag.uid': 'UID',
@@ -68,15 +54,6 @@ export default defineMessages({
     'tag.noCard': 'タグが置かれていません',
     'tag.placeTag': 'タグをリーダーに置いてください',
 
-    'status.reader': 'リーダー',
-    'status.noReader': 'リーダー未接続',
-    'status.noService': 'PC/SC サービス停止',
-    'status.card': 'タグ',
-    'status.noCard': 'タグなし',
-    'status.simulator': '仮想リーダー',
-    'status.busy': '処理中',
-    'status.notContactless': 'NFC 非対応の機器の可能性',
-
     'confirm.typeToConfirm': '確認のため「{word}」と入力してください',
     'confirm.irreversible': 'この操作は取り消せません',
 
@@ -85,24 +62,158 @@ export default defineMessages({
     'toast.saved': '保存しました',
     'toast.written': '書き込みました',
     'toast.read': '読み取りました',
+
+    // --- file dialogs (lib/fileFilters.ts): the same names on every screen ---
+    'file.filter.all': 'NFC のファイル（.nfcdump・.bin・.nfc）',
+    'file.filter.project': 'NFC Tag Studio のダンプ',
+    'file.filter.bin': 'バイナリのダンプ',
+    'file.filter.flipper': 'Flipper の NFC ファイル',
+    'file.openFailed.body':
+      '「{name}」は対応している形式ではないか、壊れています。.nfcdump（このアプリの形式）・.bin・Flipper の .nfc のファイルを選んでください。',
+
+    // --- app shell (renderer-core) ---
+    'app.initError.title': '起動に失敗しました',
+    'app.initError.hint':
+      'アプリを閉じて、もう一度起動してください。続くときは、NFC リーダーを USB から抜いて挿し直してから起動してください。',
+    'app.helpForScreen': 'この画面のヘルプ',
+    'common.technical': '技術情報',
+
+    // --- counting pages / blocks (never show the internal word "unit") ---
+    'unit.count.page.one': '{n} ページ',
+    'unit.count.page.many': '{n} ページ',
+    'unit.count.block.one': '{n} ブロック',
+    'unit.count.block.many': '{n} ブロック',
+    'unit.list.page.one': 'ページ {list}',
+    'unit.list.page.many': 'ページ {list}',
+    'unit.list.block.one': 'ブロック {list}',
+    'unit.list.block.many': 'ブロック {list}',
+    'unit.list.sep': '・',
+    'unit.list.range': '{from}〜{to}',
+    'unit.list.more': '{list} ほか {n} か所',
+
+    // --- unsaved changes (guardDiscard) ---
+    'discard.title': '未書き込みの変更があります',
+    'discard.message': '開いている文書に、タグにもファイルにもまだ保存していない変更が {count}あります。続けると、この変更は失われます。',
+    'discard.keepHint': '残したいときは「キャンセル」を押してから、「タグに書き込む」か「ファイルに保存」をしてください。',
+    'discard.doc.card': '開いている文書: {kind} · {idName} {uid}（タグから読み取った内容）',
+    'discard.doc.file': '開いている文書: ファイル「{name}」',
+    'discard.doc.new': '開いている文書: 新規（{kind}）',
+    'discard.confirm': '変更を破棄して続ける',
+
+    // --- reading (lib/ops) ---
+    'op.read.failed': 'タグを読み取れませんでした',
+    'op.read.targetFailed': '書き込み先のタグを読み取れませんでした',
+    'op.read.summary': '{kind} · {idName} {uid}',
+    'op.read.denied': '{count}は保護されていて読めませんでした（パスワードか鍵が必要です）。',
+    'op.read.unread': '{count}は読み取っていません（0 で表示しています）。',
+    'op.read.error': '{count}は読み取りが途切れました（0 で表示しています）。タグを置いたまま、もう一度読み取ってください。',
+    'op.read.incomplete.title': '読み取りが途中で途切れました',
+    'op.read.incomplete.message':
+      '{count}を読み取れず、0 で埋めてあります。このまま開くと、0 の部分を本当の内容と見分けられません。タグをリーダーの中央に置いたまま、もう一度読み取ってください。',
+    'op.read.incomplete.open': 'このまま開く',
+    'op.read.incomplete.cancel': '開かない',
+    'op.read.notOpened': '読み取った内容は開いていません。タグを置いたまま、もう一度読み取ってください。',
+    'op.read.standardKeysOnly': '自動読み取りでは、公開されている標準の鍵だけを試します。読めなかったセクタは「登録した鍵で読み取る」で読める場合があります。',
+    'op.busy.issuing': '一括発行の実行中は使えません。発行を停止してから、もう一度実行してください。',
+
+    // --- writing (lib/ops) ---
+    'op.write.nothing': '書き込む変更はありません',
+    'op.write.confirm.target': '書き込み先: {kind} · {idName} {uid}',
+    'op.write.confirm.targetUnknown': '書き込み先: いまリーダーの上にあるタグ',
+    'op.write.confirm.copyCard': '別のタグへ書き込みます（複製）。開いている文書は {idName} {uid} のタグから読み取った内容です。{idName} は複製されません。',
+    'op.write.confirm.otherCard': '開いている文書のタグ（{idName} {uid}）とは別のタグへ書き込みます。',
+    'op.write.confirm.other': '読み取ったときとは別のタグへ書き込みます。書き込み先の {idName} を確かめてください。',
+    'op.write.confirm.fromFile': 'ファイル「{name}」の内容を、このタグへ書き込みます。タグの {idName} は変わりません。',
+    'op.write.confirm.fromNew': '新規の文書の内容を、このタグへ書き込みます。タグの {idName} は変わりません。',
+    'op.write.confirm.reactivate': '保護の設定は、書き込んだあとタグをいったんリーダーから離して、置き直すと有効になります。',
+    'op.write.confirm.keepPlaced': '書き込みが終わるまで、タグをリーダーの上に置いたままにしてください。',
+    'op.write.done': 'タグに書き込みました',
+    'op.write.doneVerified': '{count}を書き込み、読み直して一致を確かめました（照合 OK）。',
+    'op.write.doneUnverified': '{count}を書き込みました（照合はしていません）。',
+    'op.write.partialTitle': '一部を書き込めませんでした',
+    'op.write.failedTitle': 'タグに書き込めませんでした',
+    'op.write.abortedTitle': '書き込みの途中で止まりました',
+    'op.write.unitsReason': '{units}: {reason}',
+    'op.write.othersWritten': 'ほかの {count}は書き込み済みです。',
+    'op.write.noneWritten': 'タグには何も書き込まれていません。',
+    'op.write.partialState': 'タグは一部だけ書き込まれた状態です（書き込み済み {done}・未実施 {left}）。',
+    'op.write.retrySameTag': '同じタグを置いたまま、もう一度書き込んでください。',
+    'op.write.retryPlace': '書き込み先のタグ（{idName} {uid}）をリーダーに置いて、もう一度書き込んでください。',
+    'op.write.writtenUnverifiedTitle': '書き込みました（照合の前にタグが離れました）',
+    'op.write.writtenUnverified': '{count}を書き込みました。照合はできていません。タグを置いて読み取ると確かめられます。',
+    'op.write.dropped':
+      '{units} の変更は書き込まれていません。開いている文書は書き込んだタグに替わったため、この変更は残っていません。',
+    'op.write.kept': '書き込めなかった変更は、未書き込みの変更として残してあります。',
+    'op.write.thrownNothing': 'タグには何も書き込まれていません。未書き込みの変更は、そのまま残してあります。',
+    'op.write.thrownMaybe': '未書き込みの変更は、そのまま残してあります。タグを置いたまま読み取り直すと、いまの内容を確かめられます。',
+    'op.write.rereadFailed': '書き込んだあとの確認の読み取りができませんでした。タグを置いたまま読み取り直すと、いまの内容を確かめられます。',
+    'op.write.rereadFailedMarked':
+      '書き込んだあとの確認の読み取りができませんでした。表示は書き込んだ内容です。タグを置いたまま読み取り直すと、いまの内容を確かめられます。',
+    'op.write.rereadFailedStale':
+      '書き込んだあとの確認の読み取りができませんでした。開いている文書は、書き込む前の内容のままです。タグを置いて読み取り直してください。',
+    'op.write.rereadOtherTag': '確認の読み取りのとき、別のタグ（{idName} {uid}）が置かれていました。開いている文書は書き換えていません。',
+    'op.write.docKept': '開いている文書（未書き込みの変更 {count}）は、書き込む前のまま残してあります。',
+    'op.write.docKeptOther': '開いている文書は書き込んだタグとは別の内容なので、書き込む前のまま残してあります。',
+    'op.write.overwritten': '開いている文書の未書き込みの変更のうち {count}は、今回の書き込みで上書きされました。',
+    'op.write.reactivate': '保護の設定を有効にするには、タグをいったんリーダーから離して、置き直してください。',
+
+    // --- why a read / write button is disabled (useOpBlockText) ---
+    'op.block.service': 'NFC リーダーを USB に接続してください',
+    'op.block.no-reader': 'NFC リーダーが見つかりません。USB に接続してください',
+    'op.block.absent': 'タグをリーダーの上に置いてください',
+    'op.block.detecting': 'タグを確認しています。置いたままにしてください',
+    'op.block.unsupported': '対応していない種類のタグです',
+    'op.block.error': 'タグを読み取れません。リーダーの中央に置き直してください',
+    'op.block.issuing': '一括発行の実行中は使えません',
+    'op.block.busy': '処理中です。終わるまでお待ちください',
+
+    // --- the tag on the active reader (TagOnReader) ---
+    'reader.virtual': '仮想リーダー（お試し）',
+    'reader.using': '使用中のリーダー: {name}',
+    'reader.state.no-reader': 'リーダーなし',
+    'reader.state.absent': 'タグなし',
+    'reader.state.detecting': '確認中…',
+    'reader.state.ready': '{kind} · {idName} {uid}',
+    'reader.state.unsupported': '未対応のタグ',
+    'reader.state.error': '読み取れません',
+    'reader.state.withUid': '{state}（{idName} {uid}）',
+    'reader.hint.absent':
+      'タグをリーダーの上に置いてください。読み取りが終わるまで、置いたままにしてください（改札のように一瞬タッチするだけでは読めません）。',
+    'reader.hint.detecting': 'タグを確認しています。置いたままにしてください。',
+    'reader.hint.unsupported':
+      'このタグの種類には対応していません。対応しているのは NTAG213/215/216・MIFARE Classic 1K/4K・FeliCa Lite-S です。',
+    'reader.hint.error': 'タグを読み取れません。リーダーの中央に置き直してください（金属の上や、2 枚重ねでは読めないことがあります）。',
+    'reader.retry': 'もう一度確認',
+    'reader.selectedMissing': '設定で選んだリーダー「{name}」が接続されていません。',
+    'reader.useAuto': '自動選択に戻す',
+    'reader.ignoredReal': '仮想リーダーが有効なため、実機のリーダー「{name}」の上のタグは使われていません。',
+    'reader.turnOffVirtual': '仮想リーダーをオフにする',
+    'reader.otherTag': '開いている文書とは別のタグが置かれています。',
+    'reader.readThis': 'このタグを読み取る',
+    'reader.keysHint': '自動読み取りでは、公開されている標準の鍵だけを試しました。読めなかったセクタは、登録した鍵で読み取ると読める場合があります。',
+    'reader.readWithKeys': '登録した鍵で読み取る',
+
+    // --- last write result (LastWriteCallout) ---
+    'lastWrite.meta': '{time} · 書き込み先 {kind} · {idName} {uid}',
+    'lastWrite.other': '前回の書き込み（別のタグ {idName} {uid}）: {title}',
+
+    // --- toasts ---
+    'toast.repeated': '（{n} 回）',
+
+    // --- batch-issue results kept by the store ---
+    'issueResult.skip.duplicate': 'この UID のタグは発行済みです',
+    'issueResult.skip.not-blank': 'タグが空ではありません（発行済みのタグを守るため、書き込みませんでした）',
+    'issueResult.skip.wrong-kind': 'タグの種類が違います（置かれたタグ: {kind}）',
+    'issueResult.skip.source': '複製元のタグです（複製元には書き込みません）',
+    'issueResult.stopped.user': '一括発行を停止しました',
+    'issueResult.stopped.limit': '上限の枚数に達したため、一括発行を終えました',
+    'issueResult.stopped.rows-exhausted': 'CSV の行をすべて発行したため、一括発行を終えました',
+    'issueResult.stopped.error': 'エラーのため、一括発行を停止しました',
+    'issueResult.stopped.detail': '発行した枚数: {n} 枚',
   },
   en: {
     'app.name': 'NFC Tag Studio',
     'app.tagline': 'Issue and edit the NFC tags your organisation manages',
-
-    'nav.home': 'Read',
-    'nav.issue': 'Issue',
-    'nav.ndef': 'NDEF editor',
-    'nav.schema': 'Data schema',
-    'nav.hex': 'Binary editor',
-    'nav.backup': 'Backup & duplicate',
-    'nav.log': 'Issue log',
-    'nav.keys': 'MIFARE keys',
-    'nav.help': 'Help',
-    'nav.settings': 'Settings',
-    'nav.group.work': 'Work',
-    'nav.group.design': 'Design',
-    'nav.group.manage': 'Manage',
 
     'common.ok': 'OK',
     'common.cancel': 'Cancel',
@@ -151,15 +262,6 @@ export default defineMessages({
     'tag.noCard': 'No tag on the reader',
     'tag.placeTag': 'Place a tag on the reader',
 
-    'status.reader': 'Reader',
-    'status.noReader': 'No reader',
-    'status.noService': 'PC/SC service stopped',
-    'status.card': 'Tag',
-    'status.noCard': 'No tag',
-    'status.simulator': 'Virtual reader',
-    'status.busy': 'Working',
-    'status.notContactless': 'May not be an NFC reader',
-
     'confirm.typeToConfirm': 'Type "{word}" to confirm',
     'confirm.irreversible': 'This cannot be undone',
 
@@ -168,5 +270,156 @@ export default defineMessages({
     'toast.saved': 'Saved',
     'toast.written': 'Written',
     'toast.read': 'Read complete',
+
+    'file.filter.all': 'NFC files (.nfcdump, .bin, .nfc)',
+    'file.filter.project': 'NFC Tag Studio dump',
+    'file.filter.bin': 'Binary dump',
+    'file.filter.flipper': 'Flipper NFC file',
+    'file.openFailed.body':
+      '"{name}" is not a supported format or is damaged. Choose a .nfcdump (this app\'s format), .bin or Flipper .nfc file.',
+
+    // --- app shell (renderer-core) ---
+    'app.initError.title': 'The app failed to start',
+    'app.initError.hint':
+      'Close the app and start it again. If it keeps happening, unplug the NFC reader, plug it back in, and then start the app.',
+    'app.helpForScreen': 'Help for this screen',
+    'common.technical': 'Technical details',
+
+    // --- counting pages / blocks ---
+    'unit.count.page.one': '{n} page',
+    'unit.count.page.many': '{n} pages',
+    'unit.count.block.one': '{n} block',
+    'unit.count.block.many': '{n} blocks',
+    'unit.list.page.one': 'page {list}',
+    'unit.list.page.many': 'pages {list}',
+    'unit.list.block.one': 'block {list}',
+    'unit.list.block.many': 'blocks {list}',
+    'unit.list.sep': ', ',
+    'unit.list.range': '{from}–{to}',
+    'unit.list.more': '{list} and {n} more',
+
+    // --- unsaved changes (guardDiscard) ---
+    'discard.title': 'You have unsaved changes',
+    'discard.message':
+      'The open document has changes in {count} that have not been written to a tag or saved to a file yet. If you continue, these changes are lost.',
+    'discard.keepHint': 'To keep them, press Cancel, then use "Write to tag" or "Save to file".',
+    'discard.doc.card': 'Open document: {kind} · {idName} {uid} (read from a tag)',
+    'discard.doc.file': 'Open document: file "{name}"',
+    'discard.doc.new': 'Open document: new ({kind})',
+    'discard.confirm': 'Discard changes and continue',
+
+    // --- reading (lib/ops) ---
+    'op.read.failed': 'Could not read the tag',
+    'op.read.targetFailed': 'Could not read the target tag',
+    'op.read.summary': '{kind} · {idName} {uid}',
+    'op.read.denied': '{count} could not be read because they are protected (a password or key is required).',
+    'op.read.unread': '{count} were not read (shown as 0).',
+    'op.read.error': '{count} could not be read because the connection dropped (shown as 0). Keep the tag on the reader and read it again.',
+    'op.read.incomplete.title': 'The read was interrupted',
+    'op.read.incomplete.message':
+      '{count} could not be read and are filled with 0. If you open it like this, the zero-filled parts cannot be told apart from real data. Keep the tag in the centre of the reader and read it again.',
+    'op.read.incomplete.open': 'Open anyway',
+    'op.read.incomplete.cancel': "Don't open",
+    'op.read.notOpened': 'The data that was read has not been opened. Keep the tag on the reader and read it again.',
+    'op.read.standardKeysOnly':
+      'The automatic read tries only the public standard keys. Sectors that could not be read may open with "Read with registered keys".',
+    'op.busy.issuing': 'Not available while batch issuing is running. Stop issuing, then try again.',
+
+    // --- writing (lib/ops) ---
+    'op.write.nothing': 'Nothing to write',
+    'op.write.confirm.target': 'Target tag: {kind} · {idName} {uid}',
+    'op.write.confirm.targetUnknown': 'Target: the tag on the reader now',
+    'op.write.confirm.copyCard':
+      'Writing to a different tag (copy). The open document was read from the tag with {idName} {uid}. The {idName} is not copied.',
+    'op.write.confirm.otherCard': 'Writing to a different tag than the one the open document came from ({idName} {uid}).',
+    'op.write.confirm.other': 'Writing to a different tag than the one that was read. Check the target {idName}.',
+    'op.write.confirm.fromFile': 'Writing the contents of the file "{name}" to this tag. The tag\'s {idName} does not change.',
+    'op.write.confirm.fromNew': "Writing the new document to this tag. The tag's {idName} does not change.",
+    'op.write.confirm.reactivate': 'Protection settings take effect after writing, once you take the tag off the reader and place it again.',
+    'op.write.confirm.keepPlaced': 'Keep the tag on the reader until writing has finished.',
+    'op.write.done': 'Written to the tag',
+    'op.write.doneVerified': 'Wrote {count} and read them back to confirm they match (verified).',
+    'op.write.doneUnverified': 'Wrote {count} (not verified).',
+    'op.write.partialTitle': 'Some data could not be written',
+    'op.write.failedTitle': 'Could not write to the tag',
+    'op.write.abortedTitle': 'Writing stopped partway',
+    'op.write.unitsReason': '{units}: {reason}',
+    'op.write.othersWritten': 'The other {count} were written.',
+    'op.write.noneWritten': 'Nothing was written to the tag.',
+    'op.write.partialState': 'The tag is only partly written ({done} written, {left} not attempted).',
+    'op.write.retrySameTag': 'Keep the same tag on the reader and write again.',
+    'op.write.retryPlace': 'Place the target tag ({idName} {uid}) on the reader and write again.',
+    'op.write.writtenUnverifiedTitle': 'Written (the tag left before it was verified)',
+    'op.write.writtenUnverified': 'Wrote {count}. It could not be verified. Place the tag and read it to check.',
+    'op.write.dropped':
+      'The changes to {units} were not written. The open document is now the tag that was written, so these changes are no longer there.',
+    'op.write.kept': 'The changes that were not written are kept as unsaved changes.',
+    'op.write.thrownNothing': 'Nothing was written to the tag. Your unsaved changes are kept.',
+    'op.write.thrownMaybe': 'Your unsaved changes are kept. Keep the tag on the reader and read it again to check its current contents.',
+    'op.write.rereadFailed': 'The tag could not be read back after writing. Keep the tag on the reader and read it again to check its current contents.',
+    'op.write.rereadFailedMarked':
+      'The tag could not be read back after writing. The screen shows what was written. Keep the tag on the reader and read it again to check its current contents.',
+    'op.write.rereadFailedStale':
+      'The tag could not be read back after writing. The open document still shows the contents from before writing. Place the tag and read it again.',
+    'op.write.rereadOtherTag': 'When reading back, a different tag ({idName} {uid}) was on the reader. The open document was not changed.',
+    'op.write.docKept': 'The open document (unsaved changes: {count}) was left as it was before writing.',
+    'op.write.docKeptOther': 'The open document is different from the tag that was written, so it was left as it was before writing.',
+    'op.write.overwritten': '{count} of the unsaved changes in the open document were overwritten by this write.',
+    'op.write.reactivate': 'To make the protection settings take effect, take the tag off the reader and place it again.',
+
+    // --- why a read / write button is disabled (useOpBlockText) ---
+    'op.block.service': 'Connect an NFC reader by USB',
+    'op.block.no-reader': 'No NFC reader found. Connect one by USB',
+    'op.block.absent': 'Place a tag on the reader',
+    'op.block.detecting': 'Checking the tag. Keep it on the reader',
+    'op.block.unsupported': 'This tag type is not supported',
+    'op.block.error': 'Cannot read the tag. Place it again in the centre of the reader',
+    'op.block.issuing': 'Not available while batch issuing is running',
+    'op.block.busy': 'Working. Please wait until it finishes',
+
+    // --- the tag on the active reader (TagOnReader) ---
+    'reader.virtual': 'Virtual reader (trial)',
+    'reader.using': 'Reader in use: {name}',
+    'reader.state.no-reader': 'No reader',
+    'reader.state.absent': 'No tag',
+    'reader.state.detecting': 'Checking…',
+    'reader.state.ready': '{kind} · {idName} {uid}',
+    'reader.state.unsupported': 'Unsupported tag',
+    'reader.state.error': 'Unreadable',
+    'reader.state.withUid': '{state} ({idName} {uid})',
+    'reader.hint.absent':
+      'Place the tag on the reader and keep it there until reading has finished (a quick tap, like at a ticket gate, is not enough).',
+    'reader.hint.detecting': 'Checking the tag. Keep it on the reader.',
+    'reader.hint.unsupported':
+      'This tag type is not supported. Supported types: NTAG213/215/216, MIFARE Classic 1K/4K and FeliCa Lite-S.',
+    'reader.hint.error': 'Cannot read the tag. Place it again in the centre of the reader (it may not read on metal or when two tags overlap).',
+    'reader.retry': 'Check again',
+    'reader.selectedMissing': 'The reader selected in Settings ("{name}") is not connected.',
+    'reader.useAuto': 'Back to automatic selection',
+    'reader.ignoredReal': 'The virtual reader is on, so the tag on the real reader "{name}" is not being used.',
+    'reader.turnOffVirtual': 'Turn the virtual reader off',
+    'reader.otherTag': 'A different tag from the open document is on the reader.',
+    'reader.readThis': 'Read this tag',
+    'reader.keysHint':
+      'The automatic read tried only the public standard keys. Sectors that could not be read may open when you read with your registered keys.',
+    'reader.readWithKeys': 'Read with registered keys',
+
+    // --- last write result (LastWriteCallout) ---
+    'lastWrite.meta': '{time} · target {kind} · {idName} {uid}',
+    'lastWrite.other': 'Previous write (another tag, {idName} {uid}): {title}',
+
+    // --- toasts ---
+    'toast.repeated': '(×{n})',
+
+    // --- batch-issue results kept by the store ---
+    'issueResult.skip.duplicate': 'A tag with this UID was already issued',
+    'issueResult.skip.not-blank': 'The tag is not blank (not written, to protect tags that were already issued)',
+    'issueResult.skip.wrong-kind': 'Wrong tag type (placed tag: {kind})',
+    'issueResult.skip.source': 'This is the source tag (the source is never written)',
+    'issueResult.stopped.user': 'Batch issuing stopped',
+    'issueResult.stopped.limit': 'Batch issuing finished: the limit was reached',
+    'issueResult.stopped.rows-exhausted': 'Batch issuing finished: every CSV row was issued',
+    'issueResult.stopped.error': 'Batch issuing stopped because of an error',
+    'issueResult.stopped.detail': 'Tags issued: {n}',
   },
 });

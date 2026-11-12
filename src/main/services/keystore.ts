@@ -12,6 +12,7 @@ import { safeStorage } from 'electron';
 import type { MifareKeyEntry } from '@shared/types';
 import { bytesToHex, hexToBytes } from '@shared/hex';
 import type { ResolvedKey } from '../nfc/contract';
+import { OpError } from '../errors';
 import { readBytes, writeBytes } from './storage';
 
 const FILE = 'keys.json';
@@ -92,7 +93,9 @@ export async function createKeyStore(): Promise<KeyStore> {
     },
     async add({ label, keyHex }) {
       const clean = keyHex.replace(/[^0-9a-fA-F]/g, '').toUpperCase();
-      if (clean.length !== 12) throw new Error('鍵は 6 バイト（16 進 12 桁）で入力してください');
+      // OpError: the renderer gets "invalid input" with the code, not "unexpected error" (FIRST-9).
+      // The detail never contains the key (I4).
+      if (clean.length !== 12) throw new OpError('INVALID_INPUT', 'key must be 6 bytes (12 hex digits)');
       // hexToBytes validates; throws on bad input.
       hexToBytes(clean);
       const id = `key-${bytesToHex(crypto.getRandomValues(new Uint8Array(6)))}`;
@@ -102,7 +105,7 @@ export async function createKeyStore(): Promise<KeyStore> {
       return toEntry(entry, false);
     },
     async remove(id) {
-      if (BUILTIN.some((k) => k.id === id)) throw new Error('標準の鍵は削除できません');
+      if (BUILTIN.some((k) => k.id === id)) throw new OpError('INVALID_INPUT', 'built-in keys cannot be removed');
       user = user.filter((k) => k.id !== id);
       await persist(user);
     },

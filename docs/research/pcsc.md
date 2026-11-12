@@ -98,3 +98,13 @@ pcsclite の `LONG`/`DWORD` の幅差は `normalizeRv` と `uintptr_t` ハンド
 
 唯一見えた PC/SC 機器は Feitian の USB トークン `FS USB Token 0`（接触 ATR `3B 9F 95 81 ...`）。
 NFC リーダーではないので、自動で APDU を送らない・NFC と誤認しない。
+
+## 2026-11-12 UX 改修で変えたこと（main-nfc / main-pcsc、統合担当が記録）
+
+- **ポーリングは 300 ms**（`POLL_INTERVAL_MS`）。失敗時の再試行は 3 s。
+- **差し替えの検出**: `SCardGetStatusChange` の `dwEventState` の上位 16 ビット（イベントの回数）か ATR が変わったら、`card-changed` を出す。回数の変化は「差し替えの疑い」として出すだけで、service が UID を読み直し、同じなら何もしない（防御的な実装）。**実機（PaSoRi）の差し替えでは未確認**。自分の接続が開いている間の回数の変化は、閉じてから判断する。
+- **コンテキストの作り直し**（サービスの再起動・スリープからの復帰・USB のリセット）: 見えていたタグをすべて `card-removed`、リーダー一覧を空にしてから再接続する。戻ったときは同じタグにも `card-inserted` が出る。一括発行はこれを取り外しと見なさない（`src/main/issue/engine.ts` の `REMOVAL_SETTLE_MS`。`tests/issue-engine.test.ts` の「PC/SC context reset」）。
+- **Windows の `SCARD_E_NO_SERVICE` / `SERVICE_STOPPED`** は、リーダーが 1 台も無いときにスマートカード サービスが止まる正常な状態なので、`service='no-readers'`（`serviceMessage` に rv 名）として「リーダーを接続してください」と出す。
+- **koffi は初回の使用時に dynamic import** で読み込む。koffi が壊れていてもアプリは起動し、「PC/SC 利用不可」になる。
+- **長い transmit の途中で 40 ms ごとに `setImmediate` で順番を譲る**（MIFARE 4K などの長い読み取りで窓が固まる件の緩和）。koffi の `.async` や worker への移行（完全な非同期化、監査 CARD-13）は、実機での検証が要るのでしていない。
+- 単体テストは実機の PC/SC を起動しない: `createNfcService(deps, { pcsc: false })`。アプリでは開発ビルドに限り `NFCTS_NO_PCSC=1` で同じことができる（パッケージ版は無視）。

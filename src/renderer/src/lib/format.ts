@@ -7,6 +7,11 @@ export function formatUid(hex: string): string {
   return (hex.match(/.{1,2}/g) ?? []).join(':').toUpperCase();
 }
 
+/** What the read-only manufacturer id is called for this kind: FeliCa says IDm, the others UID. */
+export function idName(kind: TagKind | null | undefined): 'UID' | 'IDm' {
+  return kind === 'FELICA_LITE_S' ? 'IDm' : 'UID';
+}
+
 export function kindLabel(kind: TagKind | null | undefined): string {
   if (!kind) return '—';
   return specFor(kind).displayName;

@@ -68,16 +68,74 @@ export interface SimulatorState {
 
 export type ServiceState = 'ok' | 'no-readers' | 'unavailable' | 'error';
 
+/**
+ * State of the tag on the ACTIVE reader (the one read/write use). The UI shows
+ * this, never "readers[0]" (2026-11-12 UX audit CARD-1/3/7).
+ *  - no-reader:   no usable reader (none connected, service down, or the selected reader is missing)
+ *  - absent:      reader ready, no tag on it
+ *  - detecting:   a tag was placed; identification in progress (incl. retries)
+ *  - ready:       tag identified, `card` is set with a known kind
+ *  - unsupported: tag present and answered, but its kind is not supported (`card` set, kind = null).
+ *                 `card` can also be null here (PC/SC refused the tag before a UID was read).
+ *  - error:       tag present but could not be identified after retries (`cardError` says why)
+ */
+export type CardState = 'no-reader' | 'absent' | 'detecting' | 'ready' | 'unsupported' | 'error';
+
+/** Why `activeReader` is the active one. */
+export type ActiveReaderReason =
+  /** The operator selected this reader (settings). */
+  | 'selected'
+  /** The selected reader is not connected. Nothing works until it returns or selection goes back to auto. */
+  | 'selected-missing'
+  /** Auto: the virtual reader is enabled and has a tag, so it takes precedence over real readers. */
+  | 'auto-virtual'
+  /** Auto: the first likely-contactless reader that has a card. */
+  | 'auto-card'
+  /** Auto: the first likely-contactless reader (no card yet). */
+  | 'auto-first'
+  /** No usable reader. */
+  | 'none';
+
 export interface ReaderStatus {
-  /** PC/SC service state. 'unavailable' = SCardSvr stopped / library missing. */
+  /**
+   * PC/SC service state. On Windows, SCARD_E_NO_SERVICE / SERVICE_STOPPED (the
+   * smart card service stops when no reader is plugged in) is 'no-readers', with
+   * the rv name in serviceMessage. 'unavailable' = the PC/SC library is missing
+   * (or pcscd is absent on Linux / macOS). 'error' = a real failure.
+   */
   service: ServiceState;
   serviceMessage: string | null;
   readers: ReaderInfo[];
-  /** Reader the app talks to. null = auto (first likely-contactless reader with a card). */
+  /** Reader the operator selected. null = auto. (What is actually used: `activeReader`.) */
   selectedReader: string | null;
+  /** The reader read/write actually use right now (null = none). */
+  activeReader: string | null;
+  activeReason: ActiveReaderReason;
+  /**
+   * The transport read/write use with `activeReader` (driverMode resolved against
+   * the reader name), known even with no tag on it - so the UI can say "this
+   * reader cannot authenticate with a password" (storage) before a tag is placed
+   * (D11, R-UX-1). Always set by main; optional only so older fixtures compile.
+   */
+  activeDriver?: ResolvedDriver | null;
   driverMode: ReaderDriverMode;
+  /**
+   * The identified tag on the ACTIVE reader only (never a tag on another reader).
+   * Set when cardState is 'ready' or 'unsupported', and for 'error' when the
+   * UID was read but the kind could not be confirmed (kind = null, e.g. a
+   * read-protected NTAG on a storage reader). null otherwise.
+   */
   card: CardInfo | null;
-  /** Long-running operation in progress (read/write/issue). */
+  cardState: CardState;
+  /** Why cardState is 'error' / 'unsupported' (e.g. CARD_UNRESPONSIVE, READER_IN_USE, UNSUPPORTED_TAG). null otherwise. */
+  cardError: ErrorCode | null;
+  /**
+   * Name of a real contactless reader that currently holds a tag while the
+   * virtual reader takes precedence ('auto-virtual'): that real tag is NOT used.
+   * The UI must say so (CARD-1). null otherwise.
+   */
+  ignoredRealReader: string | null;
+  /** Long-running operation in progress (read/write/issue/identify). */
   busy: null | { op: 'read' | 'write' | 'issue' | 'format' | 'identify'; startedAt: number };
   simulator: SimulatorState;
 }
@@ -179,10 +237,17 @@ export interface WriteRequest {
 export interface WriteResult {
   uid: string;
   written: number[];
-  failed: { unit: number; error: string }[];
+  /** Units the tag refused / that failed, with the ErrorCode (never raw SW text). */
+  failed: { unit: number; error: ErrorCode }[];
   /** null when verify=false. */
   verified: boolean | null;
   mismatched: number[];
+  /**
+   * Set when the write stopped early (e.g. CARD_REMOVED: the tag left the reader).
+   * The tag is then only partly written; `notAttempted` lists the units not tried.
+   */
+  aborted: ErrorCode | null;
+  notAttempted: number[];
 }
 
 // ---------------------------------------------------------------------------
@@ -194,8 +259,11 @@ export type IssueTemplate =
   | { type: 'schema'; schema: DataSchema; inputs: Record<string, string> }
   /** NDEF records whose text fields may contain placeholders ({{seq}}, {{uid}} ...). */
   | { type: 'ndef'; records: NdefRecordDraft[] }
-  /** Duplicate mode: write the same data units (from a backup) to every tag. */
-  | { type: 'image'; kind: TagKind; data: Uint8Array; units: number[] };
+  /**
+   * Duplicate mode: write the same data units (from a backup) to every tag.
+   * `sourceUid`: the tag the image was read from - it is skipped (reason 'source'), not "issued".
+   */
+  | { type: 'image'; kind: TagKind; data: Uint8Array; units: number[]; sourceUid?: string | null };
 
 export interface IssueOptions {
   verify: boolean;
@@ -248,13 +316,32 @@ export interface IssueLogEntry {
 
 export type IssueEvent =
   | { type: 'started'; job: IssueJob }
+  /** A tag was already on the reader when the run started: it must be removed first (never written implicitly). */
+  | { type: 'clear-reader'; uid: string }
   | { type: 'waiting'; next: IssuePreview; issued: number }
+  /** A tag was detected; reading / checking it (blank, duplicate, kind) before writing. */
+  | { type: 'reading'; uid: string; next: IssuePreview }
   | { type: 'writing'; uid: string; next: IssuePreview }
   | { type: 'success'; entry: IssueLogEntry; issued: number }
-  | { type: 'skipped'; entry: IssueLogEntry; reason: 'duplicate' | 'not-blank' | 'wrong-kind' }
-  | { type: 'error'; entry: IssueLogEntry | null; message: string }
-  | { type: 'remove-card'; uid: string }
-  | { type: 'stopped'; reason: 'user' | 'limit' | 'rows-exhausted' | 'error'; issued: number };
+  | { type: 'skipped'; entry: IssueLogEntry; reason: 'duplicate' | 'not-blank' | 'wrong-kind' | 'source' }
+  /**
+   * `partial`: some units were already written (the tag is half-written). The
+   * same number is reserved for that UID: putting the SAME tag back retries it.
+   */
+  | { type: 'error'; entry: IssueLogEntry | null; message: string; partial: boolean }
+  /**
+   * Waiting for the tag to be removed. Carries the outcome of the tag just
+   * handled so the UI keeps showing it (green / yellow / red) until the next tag.
+   */
+  | {
+      type: 'remove-card';
+      uid: string;
+      outcome: 'ok' | 'skipped' | 'error';
+      entry: IssueLogEntry | null;
+      message: string | null;
+    }
+  /** `job`: the job state at stop (sequence.next / rowIndex) so the UI can offer "resume". */
+  | { type: 'stopped'; reason: 'user' | 'limit' | 'rows-exhausted' | 'error'; issued: number; job: IssueJob | null };
 
 // ---------------------------------------------------------------------------
 // Settings
@@ -271,6 +358,11 @@ export interface AppSettings {
   advancedMode: boolean;
   /** Ask before every write (single-tag writes; issue mode has its own start confirmation). */
   confirmBeforeWrite: boolean;
+  /**
+   * Read a tag automatically when it is placed (home / binary / NDEF screens).
+   * Never replaces unsaved edits or a document opened from a file.
+   */
+  autoRead: boolean;
   driverMode: ReaderDriverMode;
   preferredReader: string | null;
   /** First-run guide already shown. */
@@ -287,6 +379,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   sound: true,
   advancedMode: false,
   confirmBeforeWrite: true,
+  autoRead: true,
   driverMode: 'auto',
   preferredReader: null,
   onboardingDone: false,
@@ -316,7 +409,23 @@ export type ErrorCode =
   | 'INVALID_INPUT'
   | 'FILE_ERROR'
   | 'CANCELLED'
-  | 'INTERNAL';
+  | 'INTERNAL'
+  /** Another application holds the reader (SCARD_E_SHARING_VIOLATION). */
+  | 'READER_IN_USE'
+  /** The tag does not answer (SCARD_W_UNRESPONSIVE_CARD / mute): re-place it. */
+  | 'CARD_UNRESPONSIVE'
+  /** The tag on the reader is a different kind than the data being written. */
+  | 'KIND_MISMATCH'
+  /** The operation needs advanced mode. */
+  | 'ADVANCED_REQUIRED'
+  /**
+   * This reader cannot send password authentication (storage-only readers such
+   * as Sony PaSoRi: no raw NFC-A commands). A password was given but could not be
+   * used - never skip it silently (2026-11-12 review R-UX-1).
+   */
+  | 'READER_NO_AUTH'
+  /** A write touched the UID / manufacturer block (never writable, I1/I2). */
+  | 'FORBIDDEN_UNIT';
 
 export interface AppErrorPayload {
   code: ErrorCode;

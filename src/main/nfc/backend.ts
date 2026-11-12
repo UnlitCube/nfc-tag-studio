@@ -7,11 +7,29 @@
 import type { ReaderInfo } from '@shared/types';
 
 export type BackendEvent =
-  | { type: 'service'; state: 'ok' | 'unavailable' | 'error'; message: string | null }
+  | {
+      type: 'service';
+      state: 'ok' | 'unavailable' | 'error';
+      message: string | null;
+      /**
+       * 'unavailable' only because no reader is connected (Windows starts the
+       * Smart Card service when a reader is plugged in). The UI then says "connect
+       * a reader", not "the service is stopped" (2026-11-12 UX audit CARD-8).
+       */
+      noReaders?: boolean;
+    }
   /** Full reader list snapshot (sent whenever it changes). */
   | { type: 'readers'; readers: ReaderInfo[] }
   | { type: 'card-inserted'; reader: string; atr: Uint8Array }
-  | { type: 'card-removed'; reader: string };
+  | { type: 'card-removed'; reader: string }
+  /**
+   * The reader kept reporting a card, but its insertion counter / ATR changed:
+   * the tag MAY have been replaced between two polls. The service confirms by
+   * reading the UID (same UID = nothing happened) - it is never treated as a
+   * removal by itself, so an unverified signal cannot make issue mode re-issue
+   * the same tag.
+   */
+  | { type: 'card-changed'; reader: string; atr: Uint8Array };
 
 export interface CardConnection {
   readonly readerName: string;

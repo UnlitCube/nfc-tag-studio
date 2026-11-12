@@ -1,4 +1,4 @@
-// IPC handler registration. Integrator-owned.
+// IPC handler registration. Owner: main-app.
 // Registers one ipcMain.handle per INVOKE_CHANNELS entry, wrapping the result in
 // an Envelope so main never rejects across the bridge (errors carry a localized
 // message + code; the renderer's lib/api.ts unwraps them).
@@ -42,6 +42,15 @@ type Handlers = {
   [K in keyof typeof INVOKE_CHANNELS]: (...args: any[]) => Promise<unknown> | unknown;
 };
 
+/**
+ * MIFARE keys: an empty list names no keys, the same as "not given". The service
+ * then tries every key the operator holds (built-in public keys first, I3), so a
+ * factory card reads the same from every screen (audit WRITE-3 / FLOW-2).
+ */
+function keyIdsOrDefault(ids: string[] | undefined): string[] | undefined {
+  return Array.isArray(ids) && ids.length > 0 ? ids : undefined;
+}
+
 export function registerIpc(deps: IpcDeps): () => void {
   const lang = () => deps.settings.get().language;
 
@@ -67,6 +76,9 @@ export function registerIpc(deps: IpcDeps): () => void {
     // --- reader ---
     getReaderStatus: (): ReaderStatus => deps.nfc.getStatus(),
     refreshReaders: () => deps.nfc.refreshReaders(),
+    // Not a data read/write: allowed while issuing too (it can unstick a tag the
+    // issue run is waiting for).
+    reidentify: () => deps.nfc.reidentify(),
     selectReader: (name: string | null) => deps.nfc.selectReader(name),
     setDriverMode: (mode: ReaderDriverMode) => deps.nfc.setDriverMode(mode),
     setManualKind: (kind: TagKind | null) => deps.nfc.setManualKind(kind),
@@ -79,14 +91,17 @@ export function registerIpc(deps: IpcDeps): () => void {
     // --- tag ops ---
     readTag: (opts: ReadOptions): Promise<TagImage> => {
       if (deps.issue.getState().running) throw new OpError('BUSY');
-      return deps.nfc.readTag(opts ?? {});
+      const o = opts ?? {};
+      return deps.nfc.readTag({ ...o, mifareKeyIds: keyIdsOrDefault(o.mifareKeyIds) });
     },
     writeTag: (req: WriteRequest): Promise<WriteResult> => {
       if (deps.issue.getState().running) throw new OpError('BUSY');
-      return deps.nfc.writeTag(req);
+      // Protected regions (lock / CC / config / trailers) are advanced-mode only (I5).
+      if (req.allowProtected && !deps.isAdvancedMode()) throw new OpError('ADVANCED_REQUIRED', 'allowProtected');
+      return deps.nfc.writeTag({ ...req, mifareKeyIds: keyIdsOrDefault(req.mifareKeyIds) });
     },
     transmitApdu: async (apduHex: string): Promise<string> => {
-      if (!deps.isAdvancedMode()) throw new OpError('ACCESS_DENIED', 'advanced mode off');
+      if (!deps.isAdvancedMode()) throw new OpError('ADVANCED_REQUIRED', 'transmitApdu');
       if (deps.issue.getState().running) throw new OpError('BUSY');
       const resp = await deps.nfc.transmitApdu(hexToBytes(apduHex));
       return bytesToHex(resp);
@@ -99,6 +114,9 @@ export function registerIpc(deps: IpcDeps): () => void {
 
     // --- issue ---
     startIssue: (job: IssueJob) => {
+      // Password protection writes NTAG config / PWD pages (protected units): the
+      // same advanced-mode gate as a single write with allowProtected (I5, R-UX-6).
+      if (job?.options?.ntagProtect && !deps.isAdvancedMode()) throw new OpError('ADVANCED_REQUIRED', 'ntagProtect');
       deps.issue.start(job);
     },
     stopIssue: () => {
@@ -106,7 +124,10 @@ export function registerIpc(deps: IpcDeps): () => void {
     },
     getIssueState: (): IssueState => deps.issue.getState(),
     listIssueLog: (query: { limit?: number; jobId?: string }) => deps.issueLog.list(query ?? {}),
-    clearIssueLog: () => deps.issueLog.clear(),
+    clearIssueLog: () => {
+      if (deps.issue.getState().running) throw new OpError('BUSY');
+      return deps.issueLog.clear();
+    },
 
     // --- files ---
     openFile: (opts: { title?: string; filters: FileFilter[] }) => deps.files.open(deps.getWindow, opts),
@@ -123,7 +144,10 @@ export function registerIpc(deps: IpcDeps): () => void {
         const value = await handler(...args);
         return { ok: true, value };
       } catch (err) {
-        return { ok: false, error: toErrorPayload(err, lang()) };
+        const payload = toErrorPayload(err, lang());
+        // Diagnostics stay in the main log (detail never holds keys/passwords: I4).
+        if (payload.code !== 'CANCELLED') console.warn(`[ipc] ${method} failed: ${payload.code}${payload.detail ? ` (${payload.detail})` : ''}`);
+        return { ok: false, error: payload };
       }
     });
     registered.push(channel);

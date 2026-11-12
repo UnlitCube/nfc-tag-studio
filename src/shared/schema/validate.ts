@@ -167,7 +167,7 @@ function checkTagFit(kind: TagKind, area: SchemaArea, size: number, issues: Issu
   const spec = specFor(kind);
   if (area.mode === 'raw') {
     if (isForbiddenUnit(kind, area.startUnit) || isProtectedUnit(kind, area.startUnit)) {
-      push(issues, null, 'error', 'PROTECTED_AREA', `開始単位 ${area.startUnit} は書き込めない保護領域です`);
+      push(issues, null, 'error', 'PROTECTED_AREA', `開始の${spec.unit === 'page' ? 'ページ' : 'ブロック'} ${area.startUnit} は書き込めない保護領域です`);
       return;
     }
     let idx = 0;

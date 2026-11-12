@@ -64,3 +64,9 @@ ATR は PC/SC Part 3 の storage 擬似 ATR（`A0 00 00 03 06 03 00 <NN NN>`）�
 - 保護 READ → `denied` の判定はシミュレータでも実機の枠組み（NAK を非ゼロ status で返す）で検証している（`tests/nfc-driver.test.ts` の NAK→ACCESS_DENIED、`tests/nfc-service.test.ts` のパスワード保護往復）。
 - MIFARE トレーラの読み戻しは実機同様にマスクする: Key A は常に `00`、Key B はアクセス条件が許すときだけ。`writeTag` の verify もこのマスクを通して照合するので、トレーラ書き込みが「鍵は読み戻せない」ために常に mismatch になることはない（`mifareTrailerReadbackMask`、`tests/nfc-simulator.test.ts`・`tests/nfc-service.test.ts`）。
 - storage ドライバでの NTAG `FF B0` の最大 Le・末尾ページの折り返しはリーダー依存。実装は 16 バイト単位で読み、必要分だけ採用。
+
+## 8. FeliCa Lite-S の判定（2026-11-12 UX 改修、main-nfc）
+
+- storage 方式（PaSoRi）では Polling が使えないので、`FF B0 00 85 10`（SYS_C、ブロック 0x85）が `88 B4` なら Lite-S。SYS_C が読めなければ、ID ブロック 0x82 が読めるかで判定する（`src/main/nfc/felica.ts`）。
+- 0x82 は 2026-11-12 に本物の Lite-S + PaSoRi で読めた（CLAUDE.md）。**0x85 が PaSoRi で読めるかは未確認**。
+- 読み取りの途中でタグが離れた・応答しなくなったときは、ページ単位の 0 埋めの「成功」ではなく、読み取り全体を `CARD_REMOVED` / `CARD_UNRESPONSIVE` で失敗にする（タグは `FF CA` に答えるが特定のページが 2 回失敗した場合は、そのページだけ `unitStatus='error'` が残ることがある）。

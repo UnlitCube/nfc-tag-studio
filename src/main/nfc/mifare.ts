@@ -16,7 +16,7 @@ import { OpError } from '../errors';
 import type { MifareKeyType } from './apdu';
 import type { ReaderIo } from './driver';
 import type { ResolvedKey } from './contract';
-import type { UnitWriteOutcome } from './ntag';
+import { PresenceGuard, readChunk, runUnitWrites, type UnitWriteOutcome } from './unit-ops';
 
 /** Volatile reader key slot we reuse for every authentication. */
 const SLOT = 0x00;
@@ -60,28 +60,61 @@ export interface MifareReadResult {
   sectors: MifareSectorAccess[];
 }
 
+interface SectorOpener {
+  sector: number;
+  keyType: MifareKeyType;
+  label: string;
+  key: Uint8Array;
+}
+
 /** Try each key (as Key A then Key B) against a sector. Returns the opener or null. */
-async function authSector(io: ReaderIo, sector: number, keys: ResolvedKey[]): Promise<{ keyType: MifareKeyType; label: string } | null> {
+async function authSector(io: ReaderIo, sector: number, keys: ResolvedKey[]): Promise<SectorOpener | null> {
   const firstBlock = mifareSectorFirstBlock(sector);
   for (const k of keys) {
     await io.loadKey(SLOT, k.key);
     for (const keyType of ['A', 'B'] as MifareKeyType[]) {
       if (await io.authenticate(firstBlock, keyType, SLOT)) {
-        return { keyType, label: k.label };
+        return { sector, keyType, label: k.label, key: k.key };
       }
     }
   }
   return null;
 }
 
-/** Read the whole MIFARE image, sector by sector. */
-export async function readMifare(io: ReaderIo, kind: TagKind, keys: ResolvedKey[]): Promise<MifareReadResult> {
+/**
+ * R-MAIN-3: "is the tag still there?" = open again a sector that THIS tag opened
+ * in this operation, with the same key (an RF exchange; the key bytes stay in
+ * main and are never logged, I3/I4). Nothing opened yet -> no check. The caller
+ * re-authenticates the sector it works on afterwards.
+ */
+function mifareGuard(io: ReaderIo, last: () => SectorOpener | null, enabled: boolean): PresenceGuard {
+  if (!enabled) return new PresenceGuard(null);
+  return new PresenceGuard(async () => {
+    const o = last();
+    if (!o) return true; // nothing known to work: take the refusal at face value
+    await io.loadKey(SLOT, o.key);
+    return io.authenticate(mifareSectorFirstBlock(o.sector), o.keyType, SLOT);
+  });
+}
+
+export interface MifareOpOptions {
+  /** Check that the tag is still there when a sector / block is refused (R-MAIN-3). Default true. */
+  checkPresence?: boolean;
+}
+
+/**
+ * Read the whole MIFARE image, sector by sector. A sector no provided key opens
+ * is 'denied'; a tag that leaves the reader rejects the whole read (CARD_REMOVED).
+ */
+export async function readMifare(io: ReaderIo, kind: TagKind, keys: ResolvedKey[], opts: MifareOpOptions = {}): Promise<MifareReadResult> {
   const spec = specFor(kind);
   const blocks = spec.unitCount;
   const data = new Uint8Array(blocks * 16);
   const unitStatus: UnitStatus[] = new Array(blocks).fill('unread');
   const sectorCount = mifareSectorCount(kind);
   const sectors: MifareSectorAccess[] = [];
+  let lastOpened: SectorOpener | null = null;
+  const guard = mifareGuard(io, () => lastOpened, opts.checkPresence !== false);
 
   for (let s = 0; s < sectorCount; s++) {
     const first = mifareSectorFirstBlock(s);
@@ -90,20 +123,26 @@ export async function readMifare(io: ReaderIo, kind: TagKind, keys: ResolvedKey[
     if (!auth) {
       sectors.push({ sector: s, keyType: null, keyLabel: null });
       for (let b = first; b < first + count; b++) unitStatus[b] = 'denied';
+      // No key opened it: a key we do not hold, or the tag just left? (R-MAIN-3)
+      await guard.refused();
       continue;
     }
+    lastOpened = auth;
     sectors.push({ sector: s, keyType: auth.keyType, keyLabel: auth.label });
     for (let b = first; b < first + count; b++) {
-      try {
+      // Throws CARD_REMOVED (whole read fails) when the tag left the reader.
+      const r = await readChunk(io, async () => {
         const bytes = await io.readBinary(b, 16);
         if (bytes.length < 16) throw new OpError('READ_FAILED', `block ${b}`);
-        data.set(bytes.subarray(0, 16), b * 16);
-        unitStatus[b] = 'ok';
-      } catch (e) {
-        unitStatus[b] = e instanceof OpError && e.code === 'ACCESS_DENIED' ? 'denied' : 'error';
-      }
+        return bytes;
+      });
+      if (r.status === 'ok') data.set(r.data.subarray(0, 16), b * 16);
+      unitStatus[b] = r.status;
+      // Inside an open sector a probe would change the authenticated sector: check at the end.
+      if (r.status !== 'ok') await guard.refused(false);
     }
   }
+  await guard.finish();
   return { data, unitStatus, sectors };
 }
 
@@ -119,28 +158,28 @@ export async function readMifareBlock(io: ReaderIo, block: number, keys: Resolve
 
 /**
  * Write blocks in order. Authenticates once per sector (re-authenticating after a
- * failure). Returns which blocks were written and which failed.
+ * failure). Returns which blocks were written and which failed; a tag that leaves
+ * the reader stops the loop (`aborted`, `notAttempted`).
  */
-export async function writeMifare(io: ReaderIo, writes: UnitWrite[], keys: ResolvedKey[]): Promise<UnitWriteOutcome> {
-  const written: number[] = [];
-  const failed: { unit: number; error: string }[] = [];
+export async function writeMifare(io: ReaderIo, writes: UnitWrite[], keys: ResolvedKey[], opts: MifareOpOptions = {}): Promise<UnitWriteOutcome> {
   let authedSector = -1;
-
-  for (const w of writes) {
-    const sector = mifareSectorOfBlock(w.unit);
-    try {
+  let lastOpened: SectorOpener | null = null;
+  return runUnitWrites(
+    writes,
+    async (w) => {
+      const sector = mifareSectorOfBlock(w.unit);
       if (w.data.length !== 16) throw new OpError('WRITE_FAILED', `block ${w.unit} needs 16 bytes`);
       if (authedSector !== sector) {
         const auth = await authSector(io, sector, keys);
         if (!auth) throw new OpError('ACCESS_DENIED', `sector ${sector}`);
         authedSector = sector;
+        lastOpened = auth;
       }
       await io.updateBinary(w.unit, w.data);
-      written.push(w.unit);
-    } catch (e) {
-      failed.push({ unit: w.unit, error: e instanceof OpError ? e.code : 'WRITE_FAILED' });
-      authedSector = -1; // force a fresh authentication for the next block
-    }
-  }
-  return { written, failed };
+    },
+    () => {
+      authedSector = -1; // force a fresh authentication for the next block (also after a presence probe)
+    },
+    mifareGuard(io, () => lastOpened, opts.checkPresence !== false),
+  );
 }

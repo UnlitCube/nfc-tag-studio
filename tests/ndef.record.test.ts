@@ -243,6 +243,23 @@ describe('describeDraft / emptyDraft', () => {
       expect(d.kind).toBe(k);
     }
   });
+
+  // E2E-UX-6: on a Japanese screen a new text record was 'en' (the issue result said 「テキスト（en）」).
+  it('a new text / smart poster record takes the language given (the editor passes the display language)', () => {
+    const text = emptyDraft('text', { lang: 'ja' });
+    expect(text.kind === 'text' && text.lang).toBe('ja');
+    const poster = emptyDraft('smartposter', { lang: 'ja' });
+    expect(poster.kind === 'smartposter' && poster.lang).toBe('ja');
+    expect(describeDraft(emptyDraft('text', { lang: 'ja' }), 'ja')).toContain('テキスト（ja）');
+    // The encoded record carries it: status byte (UTF-8, 2-byte code) + "ja".
+    const raw = encodeDraft({ ...(text as Extract<NdefRecordDraft, { kind: 'text' }>), text: 'こんにちは' });
+    expect([...raw.payload.slice(0, 3)]).toEqual([0x02, 0x6a, 0x61]);
+    // Without a language (or a blank one) it stays 'en'.
+    const plain = emptyDraft('text');
+    expect(plain.kind === 'text' && plain.lang).toBe('en');
+    const blank = emptyDraft('text', { lang: '  ' });
+    expect(blank.kind === 'text' && blank.lang).toBe('en');
+  });
 });
 
 describe('encodeDrafts / decodeToDrafts', () => {

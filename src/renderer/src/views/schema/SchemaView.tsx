@@ -5,7 +5,7 @@
 // Invariant reminder (I1/I2): a schema only ever describes the tag's DATA area.
 // The UID is read-only; nothing here changes or clones a UID. The "UID copy"
 // source merely places a reference copy of the read-only UID into the data.
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Database, FileDown, FileUp, Hash, ListPlus, Plus, Save, Send, Trash2 } from 'lucide-react';
 import type { TagKind } from '@shared/tags';
 import { TAG_KINDS, isNtag, specFor } from '@shared/tags';
@@ -63,6 +63,7 @@ export function SchemaView() {
   const toast = useAppStore((s) => s.toast);
   const toastError = useAppStore((s) => s.toastError);
   const confirm = useAppStore((s) => s.confirm);
+  const setUnsavedDraft = useAppStore((s) => s.setUnsavedDraft);
 
   const [extra, setExtra] = useState<DataSchema[]>([]);
   const [draft, setDraft] = useState<DataSchema | null>(null);
@@ -72,6 +73,10 @@ export function SchemaView() {
 
   const primaryKind: TagKind = draft?.tagKinds[0] ?? 'NTAG213';
   const dirty = draft != null && JSON.stringify(draft) !== baseline;
+  // Closing the window must not silently drop an unsaved schema (WALK-13).
+  useEffect(() => {
+    setUnsavedDraft('schema', dirty);
+  }, [dirty, setUnsavedDraft]);
 
   const validation = useMemo(() => {
     if (!draft) return { available: true, issues: [] as SchemaIssue[] };

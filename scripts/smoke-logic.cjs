@@ -1,10 +1,10 @@
-// Stopgap logic smoke test, used because vitest cannot start in this environment
-// (trivial tests fail with "Cannot read properties of undefined (reading 'config')";
-// vite 8 + vitest worker incompatibility, see CLAUDE.md). This is NOT a vitest
-// replacement - it compiles src/shared with tsc and asserts the critical / recently
-// fixed pure logic (FeliCa MC masks, NTAG lock state) plus core sanity. Run:
+// Logic smoke test (vitest-independent). Written when vitest could not start here
+// (2026-11-12; the cause was a lower-case drive letter in the cwd, now handled by
+// scripts/run-vitest.cjs - see CLAUDE.md). `npm run unit` is the real suite; this
+// compiles src/shared with tsc and asserts the critical / recently fixed pure
+// logic (FeliCa MC masks, NTAG lock state, the write planner's per-kind rules)
+// plus core sanity, as a fast extra guard in `npm test`. Run:
 //   npm run test:smoke
-// When vitest works again, `npm run unit` is the real suite; keep this as a fast guard.
 const { execFileSync } = require('node:child_process');
 const os = require('node:os');
 const path = require('node:path');
@@ -14,7 +14,7 @@ const root = path.resolve(__dirname, '..');
 const outDir = fs.mkdtempSync(path.join(os.tmpdir(), 'nfc-smoke-'));
 try {
   const tsc = require.resolve('typescript/bin/tsc');
-  const files = ['src/shared/felica.ts', 'src/shared/tag/ntag.ts', 'src/shared/tags.ts', 'src/shared/hex.ts', 'src/shared/types.ts'];
+  const files = ['src/shared/felica.ts', 'src/shared/tag/ntag.ts', 'src/shared/tag/plan.ts', 'src/shared/tags.ts', 'src/shared/hex.ts', 'src/shared/types.ts'];
   execFileSync(
     process.execPath,
     [tsc, '--rootDir', 'src/shared', '--outDir', outDir, '--module', 'commonjs', '--target', 'es2020', '--moduleResolution', 'node', '--skipLibCheck', '--esModuleInterop', ...files],
@@ -25,6 +25,7 @@ try {
   const { readNtagLockState, buildNtagLockUserAreaWrites, readNtagConfig } = require(path.join(outDir, 'tag', 'ntag.js'));
   const { factoryImage, specFor, ntagPages, imageSize, kindFromCc, kindFromVersion, kindFromFelicaSystemCode, FELICA_LITE_S_SYSTEM_CODE } = require(path.join(outDir, 'tags.js'));
   const { bytesToHex, hexToBytes } = require(path.join(outDir, 'hex.js'));
+  const { planWrites } = require(path.join(outDir, 'tag', 'plan.js'));
 
   let pass = 0;
   const fails = [];
@@ -71,6 +72,18 @@ try {
     ok('FeliCa decode writable[5]=false', re.writable[5] === false);
     ok('FeliCa decode writable[14]=false', re.writable[14] === false);
     ok('FeliCa decode writable[4]=true', re.writable[4] === true);
+  }
+
+  // --- write planner: MIFARE rules only for MIFARE (2026-11-12: plan.ts treated
+  //     FeliCa blocks 3/7/11 as MIFARE sector trailers and refused to write them) ---
+  {
+    const base = { kind: 'FELICA_LITE_S', uid: '0102030405060708', data: factoryImage('FELICA_LITE_S', IDM), unitStatus: new Array(specFor('FELICA_LITE_S').unitCount).fill('ok'), readAt: 0 };
+    const edited = new Uint8Array(base.data);
+    for (const u of [3, 7, 11]) edited[u * 16] = 0x5a;
+    const plan = planWrites('FELICA_LITE_S', base, edited, { includeProtected: false });
+    const units = plan.writes.map((w) => w.unit);
+    ok('FeliCa S_PAD3/7/11 edits are planned', [3, 7, 11].every((u) => units.includes(u)));
+    ok('FeliCa S_PAD3/7/11 not forbidden', ![3, 7, 11].some((u) => plan.forbiddenUnits.includes(u)));
   }
 
   // --- NTAG lock state (fixed: byte3=0xBD is not a lock bit, gran=2) ---

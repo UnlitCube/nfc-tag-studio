@@ -1,31 +1,67 @@
 // Help. Owner: agent "shell-ui".
-import { useEffect, useRef } from 'react';
-import { Callout, Page, PageHeader } from '../../components/ui';
+// Keep-alive (App.tsx keeps this view mounted): the "scroll to the requested
+// topic" runs whenever help becomes visible, not only on mount. A "back to
+// <screen>" button returns to where the operator came from (F1 / "?" / nav),
+// which still holds its work (2026-11-12 UX audit FIRST-8).
+import { useEffect, useRef, useState } from 'react';
+import { ArrowLeft, BookOpenCheck } from 'lucide-react';
+import { Button, Callout, Page, PageHeader } from '../../components/ui';
 import { useAppStore } from '../../store/app';
 import { useT } from '../../i18n';
 import type { MsgKey } from '../../i18n';
-import { HELP_TOPICS, helpContent } from './helpContent';
+import { useViewActive } from '../../lib/viewActive';
+import { useReturnView } from '../../components/shell/navHistory';
+import { navLabelKey } from '../../components/shell/Sidebar';
+import { openOnboarding } from '../../components/shell/Onboarding';
+import { HELP_TOPICS, helpContent, resolveHelpTopic } from './helpContent';
 import type { HelpTopicId } from './helpContent';
 import './help.css';
 
 export function HelpView() {
   const t = useT();
   const lang = useAppStore((s) => s.settings.language);
-  const helpTopic = useAppStore((s) => s.helpTopic);
+  const requested = useAppStore((s) => s.helpTopic);
+  const setView = useAppStore((s) => s.setView);
+  const active = useViewActive();
+  const back = useReturnView();
   const content = helpContent(lang);
   const refs = useRef<Record<string, HTMLElement | null>>({});
+  const [current, setCurrent] = useState<HelpTopicId | null>(null);
+
+  const target = resolveHelpTopic(requested);
 
   useEffect(() => {
-    if (helpTopic && refs.current[helpTopic]) {
-      refs.current[helpTopic]!.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    if (!active) return;
+    setCurrent(target);
+    if (target && refs.current[target]) {
+      refs.current[target]!.scrollIntoView({ behavior: 'smooth', block: 'start' });
     }
-  }, [helpTopic]);
+  }, [active, target]);
 
   const topicLabel = (id: HelpTopicId) => t(`help.topic.${id}` as MsgKey);
+  const goto = (id: HelpTopicId) => {
+    setCurrent(id);
+    refs.current[id]?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  };
 
   return (
     <Page className="help-page">
-      <PageHeader title={t('help.title')} subtitle={t('help.subtitle')} />
+      <PageHeader
+        title={t('help.title')}
+        subtitle={t('help.subtitle')}
+        actions={
+          <>
+            <Button icon={BookOpenCheck} onClick={openOnboarding} data-testid="help-open-guide">
+              {t('help.openGuide')}
+            </Button>
+            {back !== 'help' ? (
+              <Button variant="primary" icon={ArrowLeft} onClick={() => setView(back)} data-testid="help-back">
+                {t('help.back', { name: t(navLabelKey(back)) })}
+              </Button>
+            ) : null}
+          </>
+        }
+      />
       <div className="help-layout">
         <nav className="help-toc" aria-label={t('help.contents')}>
           <div className="help-toc-title">{t('help.contents')}</div>
@@ -34,8 +70,8 @@ export function HelpView() {
               key={id}
               type="button"
               className="help-toc-item"
-              aria-current={helpTopic === id ? 'true' : undefined}
-              onClick={() => refs.current[id]?.scrollIntoView({ behavior: 'smooth', block: 'start' })}
+              aria-current={current === id ? 'true' : undefined}
+              onClick={() => goto(id)}
             >
               {topicLabel(id)}
             </button>
@@ -46,6 +82,7 @@ export function HelpView() {
             <section
               key={id}
               className="help-section"
+              data-testid={`help-${id}`}
               ref={(el) => {
                 refs.current[id] = el;
               }}

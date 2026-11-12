@@ -75,12 +75,14 @@ export const SCARD_E_INVALID_VALUE = 0x80100011;
 export const SCARD_E_SYSTEM_CANCELLED = 0x80100012;
 export const SCARD_F_COMM_ERROR = 0x80100013;
 export const SCARD_F_UNKNOWN_ERROR = 0x80100014;
+export const SCARD_E_NOT_TRANSACTED = 0x80100016;
 export const SCARD_E_READER_UNAVAILABLE = 0x80100017;
 export const SCARD_E_NO_SERVICE = 0x8010001d;
 export const SCARD_E_SERVICE_STOPPED = 0x8010001e;
 export const SCARD_E_CARD_UNSUPPORTED = 0x8010001c;
 export const SCARD_E_NO_READERS_AVAILABLE = 0x8010002e;
 export const SCARD_E_COMM_DATA_LOST = 0x8010002f;
+export const SCARD_W_UNSUPPORTED_CARD = 0x80100065;
 export const SCARD_W_UNRESPONSIVE_CARD = 0x80100066;
 export const SCARD_W_UNPOWERED_CARD = 0x80100067;
 export const SCARD_W_RESET_CARD = 0x80100068;
@@ -99,6 +101,19 @@ export function isOk(rv: number | bigint): boolean {
 export function isServiceUnavailableRv(rv: number | bigint): boolean {
   const c = normalizeRv(rv);
   return c === SCARD_E_NO_SERVICE || c === SCARD_E_SERVICE_STOPPED;
+}
+
+/**
+ * The service is down only because no reader is connected. Windows 8+ starts
+ * the Smart Card service (SCardSvr) when a reader is plugged in and stops it
+ * after the last one is removed, so SCARD_E_NO_SERVICE / SERVICE_STOPPED is the
+ * normal "no reader" state there - telling the operator "the service is stopped"
+ * sends them to services.msc when they only need to plug the reader in
+ * (2026-11-12 UX audit CARD-8). On Linux / macOS (pcscd) it does mean the
+ * daemon is missing.
+ */
+export function serviceDownMeansNoReaders(rv: number | bigint, platform: string): boolean {
+  return platform === 'win32' && isServiceUnavailableRv(rv);
 }
 
 /** No reader is connected (distinct from "no card on a reader"). */
@@ -138,19 +153,29 @@ const RV_NAMES: Record<number, string> = {
   [SCARD_E_SYSTEM_CANCELLED]: 'SCARD_E_SYSTEM_CANCELLED',
   [SCARD_F_COMM_ERROR]: 'SCARD_F_COMM_ERROR',
   [SCARD_F_UNKNOWN_ERROR]: 'SCARD_F_UNKNOWN_ERROR',
+  [SCARD_E_NOT_TRANSACTED]: 'SCARD_E_NOT_TRANSACTED',
   [SCARD_E_READER_UNAVAILABLE]: 'SCARD_E_READER_UNAVAILABLE',
   [SCARD_E_CARD_UNSUPPORTED]: 'SCARD_E_CARD_UNSUPPORTED',
   [SCARD_E_NO_SERVICE]: 'SCARD_E_NO_SERVICE',
   [SCARD_E_SERVICE_STOPPED]: 'SCARD_E_SERVICE_STOPPED',
   [SCARD_E_NO_READERS_AVAILABLE]: 'SCARD_E_NO_READERS_AVAILABLE',
   [SCARD_E_COMM_DATA_LOST]: 'SCARD_E_COMM_DATA_LOST',
+  [SCARD_W_UNSUPPORTED_CARD]: 'SCARD_W_UNSUPPORTED_CARD',
   [SCARD_W_UNRESPONSIVE_CARD]: 'SCARD_W_UNRESPONSIVE_CARD',
   [SCARD_W_UNPOWERED_CARD]: 'SCARD_W_UNPOWERED_CARD',
   [SCARD_W_RESET_CARD]: 'SCARD_W_RESET_CARD',
   [SCARD_W_REMOVED_CARD]: 'SCARD_W_REMOVED_CARD',
 };
 
-/** Map a PC/SC return code to an app ErrorCode (secrets never involved). */
+/**
+ * Map a PC/SC return code to an app ErrorCode (secrets never involved).
+ * 2026-11-12 UX audit FIRST-10 / CARD-11: the code decides what the operator is
+ * told to do, so
+ *  - SHARING_VIOLATION = another application holds the reader -> READER_IN_USE
+ *    ("close the other app"), not BUSY ("wait for this app's own operation");
+ *  - UNRESPONSIVE_CARD = the tag does not answer (badly placed) -> CARD_UNRESPONSIVE
+ *    ("re-place it"), not UNSUPPORTED_TAG (which made people throw good tags away).
+ */
 export function pcscErrorCode(rv: number | bigint): ErrorCode {
   const c = normalizeRv(rv);
   switch (c) {
@@ -169,11 +194,13 @@ export function pcscErrorCode(rv: number | bigint): ErrorCode {
     case SCARD_W_UNPOWERED_CARD:
       return 'CARD_REMOVED';
     case SCARD_E_SHARING_VIOLATION:
-      return 'BUSY';
+      return 'READER_IN_USE';
+    case SCARD_W_UNRESPONSIVE_CARD:
+      return 'CARD_UNRESPONSIVE';
     case SCARD_E_CARD_UNSUPPORTED:
+    case SCARD_W_UNSUPPORTED_CARD:
     case SCARD_E_UNKNOWN_CARD:
     case SCARD_E_PROTO_MISMATCH:
-    case SCARD_W_UNRESPONSIVE_CARD:
       return 'UNSUPPORTED_TAG';
     case SCARD_E_CANCELLED:
     case SCARD_E_SYSTEM_CANCELLED:
@@ -181,6 +208,7 @@ export function pcscErrorCode(rv: number | bigint): ErrorCode {
     case SCARD_E_TIMEOUT:
     case SCARD_F_COMM_ERROR:
     case SCARD_E_COMM_DATA_LOST:
+    case SCARD_E_NOT_TRANSACTED:
       return 'READ_FAILED';
     case SCARD_E_INVALID_HANDLE:
     case SCARD_E_INVALID_PARAMETER:
@@ -282,6 +310,45 @@ export function isPresent(eventState: number): boolean {
 /** Another process holds the reader (SCARD_STATE_INUSE). */
 export function isInUse(eventState: number): boolean {
   return (eventState & SCARD_STATE_INUSE) !== 0;
+}
+
+/**
+ * SCARD_STATE_INUSE as the UI should see it ("another app is using the reader").
+ * Windows sets the flag for ANY open handle - our own read included - and for a
+ * moment while its smart-card plug-and-play probes a newly placed card. On the
+ * real PaSoRi (2026-11-13) the raw flag flashed the warning ~0.3 s after every
+ * read of ours. So: never while / just after OUR connection holds the reader
+ * (`ours`), and only once it lasted two polls in a row. Pure.
+ */
+export function effectiveInUse(raw: boolean, ours: boolean, prevStreak: number): { inUse: boolean; streak: number } {
+  if (!raw || ours) return { inUse: false, streak: 0 };
+  const streak = prevStreak + 1;
+  return { inUse: streak >= 2, streak };
+}
+
+/**
+ * Card insertion/removal counter carried in the upper 16 bits of dwEventState
+ * (Windows and pcsc-lite convention; the dev PC's token reported 0x00010422).
+ * A tag replaced by another between two polls keeps PRESENT set, so presence
+ * alone misses the swap - the counter (or the ATR) still changes.
+ * NOTE: not yet verified with a real swap on a PaSoRi; callers treat a change
+ * only as "possibly swapped" and confirm by reading the UID.
+ */
+export function eventCountOf(eventState: number): number {
+  return (eventState >>> 16) & 0xffff;
+}
+
+/** The tag may have been replaced while the reader kept reporting PRESENT. */
+export function cardSwapSuspected(
+  before: { atr: Uint8Array; events: number | null },
+  now: { atr: Uint8Array; events: number | null },
+): boolean {
+  if (before.events !== null && now.events !== null && before.events !== now.events) return true;
+  if (before.atr.length > 0 && now.atr.length > 0) {
+    if (before.atr.length !== now.atr.length) return true;
+    for (let i = 0; i < now.atr.length; i++) if (before.atr[i] !== now.atr[i]) return true;
+  }
+  return false;
 }
 
 /**

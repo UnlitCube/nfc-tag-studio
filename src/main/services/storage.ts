@@ -11,13 +11,22 @@ function pathOf(name: string): string {
   return join(dir(), name);
 }
 
+/** Unique per write: two writes of the same file in flight must not share a temp file. */
+let tmpSeq = 0;
+
 /** Write bytes atomically (temp file + rename). */
 export async function writeBytes(name: string, data: Uint8Array): Promise<void> {
   const target = pathOf(name);
-  const tmp = `${target}.tmp-${process.pid}`;
+  const tmp = `${target}.tmp-${process.pid}-${++tmpSeq}`;
   await fs.mkdir(dir(), { recursive: true });
   await fs.writeFile(tmp, data);
   await fs.rename(tmp, target);
+}
+
+/** Append text to a file (created when missing). For append-only records. */
+export async function appendText(name: string, text: string): Promise<void> {
+  await fs.mkdir(dir(), { recursive: true });
+  await fs.appendFile(pathOf(name), text, 'utf8');
 }
 
 export async function readBytes(name: string): Promise<Uint8Array | null> {

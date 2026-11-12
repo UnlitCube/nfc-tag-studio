@@ -369,13 +369,19 @@ export function describeDraft(draft: NdefRecordDraft, lang: 'ja' | 'en'): string
   }
 }
 
-/** A sensible empty draft of the given kind (for the editor's "add record" menu). */
-export function emptyDraft(kind: NdefRecordDraft['kind']): NdefRecordDraft {
+/**
+ * A sensible empty draft of the given kind (for the editor's "add record" menu).
+ * `opts.lang`: the language code of a new text / smart poster title (the editor
+ * passes the display language: a Japanese screen writes Japanese text, E2E-UX-6).
+ * Without it, 'en'.
+ */
+export function emptyDraft(kind: NdefRecordDraft['kind'], opts: { lang?: string } = {}): NdefRecordDraft {
+  const lang = opts.lang && opts.lang.trim() !== '' ? opts.lang.trim() : 'en';
   switch (kind) {
     case 'uri':
       return { kind: 'uri', uri: '' };
     case 'text':
-      return { kind: 'text', text: '', lang: 'en', encoding: 'utf8' };
+      return { kind: 'text', text: '', lang, encoding: 'utf8' };
     case 'wifi':
       return { kind: 'wifi', ssid: '', auth: 'wpa2-personal', encryption: 'aes', password: '', hidden: false };
     case 'vcard':
@@ -387,7 +393,7 @@ export function emptyDraft(kind: NdefRecordDraft['kind']): NdefRecordDraft {
     case 'external':
       return { kind: 'external', domainType: 'example.com:type', payloadText: '', payloadHex: '' };
     case 'smartposter':
-      return { kind: 'smartposter', uri: '', title: '', lang: 'en' };
+      return { kind: 'smartposter', uri: '', title: '', lang };
     case 'raw':
       return { kind: 'raw', tnf: TNF.UNKNOWN, typeHex: '', idHex: '', payloadHex: '' };
     case 'empty':

@@ -11,7 +11,7 @@
 export { blankImage, cloneImage, unitBytes, diffUnits, isBlankDataArea } from './image';
 
 // --- Write planning ---
-export { planWrites } from './plan';
+export { planWrites, lockedUnitsOf } from './plan';
 export type { PlanWarningCode, PlanWarning, WritePlan } from './plan';
 
 // --- NTAG21x configuration ---

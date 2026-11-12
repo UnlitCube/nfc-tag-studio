@@ -1,0 +1,139 @@
+/* Home (read) screen. Owner: agent "shell-ui". Tokens only. */
+.home-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--space-4);
+  align-items: start;
+}
+@media (max-width: 960px) {
+  .home-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+.home-panel {
+  min-width: 0;
+}
+
+/* "What to do now" block of the tag panel. */
+.home-guide {
+  display: flex;
+  gap: var(--space-3);
+  align-items: flex-start;
+  padding: var(--space-3);
+  border-radius: var(--radius);
+  background: var(--surface-inset);
+}
+.home-guide-icon {
+  flex: none;
+  width: 40px;
+  height: 40px;
+  border-radius: var(--radius-pill);
+  display: grid;
+  place-items: center;
+  background: var(--surface);
+  color: var(--text-dim);
+}
+.home-guide[data-tone='info'] .home-guide-icon {
+  background: var(--info-soft);
+  color: var(--info);
+}
+.home-guide[data-tone='ok'] .home-guide-icon {
+  background: var(--ok-soft);
+  color: var(--ok);
+}
+.home-guide[data-tone='warn'] .home-guide-icon {
+  background: var(--warn-soft);
+  color: var(--warn);
+}
+.home-guide[data-tone='danger'] .home-guide-icon {
+  background: var(--danger-soft);
+  color: var(--danger);
+}
+.home-guide-title {
+  font-size: var(--fs-heading);
+  font-weight: 650;
+  color: var(--text);
+}
+.home-guide p {
+  margin: 0;
+  line-height: 1.6;
+}
+.home-emph {
+  font-weight: 600;
+}
+.home-actions {
+  flex-wrap: wrap;
+  margin-top: var(--space-1);
+}
+.home-doc-actions {
+  flex-wrap: wrap;
+}
+
+.home-details > summary {
+  cursor: pointer;
+  color: var(--accent-text);
+  font-weight: 600;
+  padding: var(--space-1) 0;
+}
+.home-details-body {
+  margin-top: var(--space-2);
+}
+.home-list {
+  margin: var(--space-2) 0 0;
+  padding-left: 1.3em;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  line-height: 1.6;
+}
+
+/* UID / IDm: wraps only between bytes (a <wbr> after each ':'). */
+.home-uid {
+  word-break: keep-all;
+  overflow-wrap: normal;
+}
+
+.stack-tight {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+/* "Try it (no hardware)": collapsed unless the virtual reader is on. */
+.home-sim {
+  padding: 0;
+}
+.home-sim-summary {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-3) var(--space-4);
+  cursor: pointer;
+  font-weight: 600;
+  list-style: none;
+}
+.home-sim-summary::-webkit-details-marker {
+  display: none;
+}
+.home-sim-summary::before {
+  content: '▸';
+  color: var(--text-dim);
+  transition: transform var(--dur-fast);
+}
+.home-sim[open] > .home-sim-summary::before {
+  transform: rotate(90deg);
+}
+.home-sim.is-on {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 1px var(--accent);
+}
+
+/*
+ * The shared <TagOnReader /> sits above the home guide, which already explains
+ * every state in full (why, what to do, a read button for "another tag"). Keep
+ * only its state badge and buttons here so the same sentence is not shown twice.
+ */
+.home-panel .tag-on-reader-hint,
+.home-panel [data-testid='tag-on-reader-other'] {
+  display: none;
+}

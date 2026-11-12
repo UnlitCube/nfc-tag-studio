@@ -21,6 +21,7 @@ import {
   SCARD_STATE_PRESENT,
   SCARD_STATE_EMPTY,
   SCARD_STATE_CHANGED,
+  SCARD_STATE_INUSE,
 } from '../src/main/nfc/pcsc/pure';
 
 // ---------------------------------------------------------------------------
@@ -53,11 +54,21 @@ class FakeWinscard implements Winscard {
   readerNames: string[] = [];
   /** name -> ATR when a card is present on that reader. */
   private readonly cards = new Map<string, Uint8Array>();
+  /** name -> insertion/removal counter reported in the upper 16 bits of dwEventState. */
+  readonly counts = new Map<string, number>();
+  /** Readers whose card some process holds (SCARD_STATE_INUSE). */
+  readonly inUse = new Set<string>();
+  connectCount = 0;
 
   /** Put a card (with ATR) on a reader, or clear it with null. */
   setCard(name: string, atr: Uint8Array | null): void {
     if (atr) this.cards.set(name, atr);
     else this.cards.delete(name);
+  }
+
+  /** Bump the event counter (what Windows does when a card goes in / out). */
+  bump(name: string, by = 1): void {
+    this.counts.set(name, (this.counts.get(name) ?? 0) + by);
   }
 
   establishContext(): { rv: number; ctx: Handle } {
@@ -94,17 +105,27 @@ class FakeWinscard implements Winscard {
     const states: ReaderState[] = names.map((name) => {
       const atr = this.cards.get(name);
       const present = atr != null;
-      const eventState = (present ? SCARD_STATE_PRESENT : SCARD_STATE_EMPTY) | SCARD_STATE_CHANGED;
+      const eventState = ((present ? SCARD_STATE_PRESENT : SCARD_STATE_EMPTY) | SCARD_STATE_CHANGED | (this.inUse.has(name) ? SCARD_STATE_INUSE : 0) | ((this.counts.get(name) ?? 0) << 16)) >>> 0;
       return { name, eventState, atr: present ? atr : new Uint8Array(0) };
     });
     return { rv: SCARD_S_SUCCESS, states };
   }
 
   connect(_ctx: Handle, _reader: string): { rv: number; hCard: Handle; activeProtocol: number } {
+    this.connectCount++;
     return { rv: SCARD_S_SUCCESS, hCard: 1, activeProtocol: 2 };
   }
 
+  /** Synchronous time each transmit takes (the real winscard call blocks the thread). */
+  transmitDelayMs = 0;
+
   transmit(_hCard: Handle, _apdu: Uint8Array, _proto: number): { rv: number; resp: Uint8Array } {
+    if (this.transmitDelayMs > 0) {
+      const end = Date.now() + this.transmitDelayMs;
+      while (Date.now() < end) {
+        // busy-wait like a blocking native call
+      }
+    }
     return { rv: SCARD_S_SUCCESS, resp: new Uint8Array([0x90, 0x00]) };
   }
 
@@ -277,8 +298,7 @@ describe('createPcscBackend (fake Winscard loop)', () => {
 
   it('recovers when getStatusChange returns a context-fatal rv [regression]', async () => {
     // The same teardown-and-rebuild must happen on the getStatusChange branch;
-    // otherwise the states it returns (eventState 0 regardless of rv) would be
-    // read as "every reader empty" and fire spurious card-removed events.
+    // the states it returns (eventState 0 regardless of rv) must not be read.
     const atr = new Uint8Array([0x3b, 0x8f, 0x80, 0x01]);
     fake.readerNames = [READER];
     fake.setCard(READER, atr);
@@ -293,13 +313,140 @@ describe('createPcscBackend (fake Winscard loop)', () => {
     await poll();
     expect(fake.releaseCount).toBeGreaterThan(releaseAfterStart);
     expect(events(captured, 'service').some((e) => e.state === 'error')).toBe(true);
-    // The bogus "empty" states must NOT be turned into a card-removed.
-    expect(events(captured, 'card-removed')).toHaveLength(0);
+    // CARD-6: with the context gone the tag can no longer be seen, so it is
+    // reported gone exactly once (by the teardown, not from the bogus states)...
+    expect(events(captured, 'card-removed').map((e) => e.reader)).toEqual([READER]);
+    expect(events(captured, 'readers').at(-1)?.readers).toEqual([]);
 
+    captured.length = 0;
     fake.statusRv = SCARD_S_SUCCESS;
     await poll();
     expect(fake.establishCount).toBeGreaterThan(establishAfterStart);
     expect(events(captured, 'service').at(-1)).toMatchObject({ state: 'ok' });
+    // ...and re-detected once the context is back.
+    expect(events(captured, 'card-inserted').map((e) => e.reader)).toEqual([READER]);
+  });
+
+  it('a tag taken away while the context was down stays gone after recovery (CARD-6)', async () => {
+    fake.readerNames = [READER];
+    fake.setCard(READER, new Uint8Array([0x3b, 0x8f, 0x80, 0x01]));
+    await begin();
+    captured.length = 0;
+
+    // e.g. sleep: the service restarts and the old handle is dead
+    fake.listRv = SCARD_E_INVALID_HANDLE;
+    await poll();
+    expect(events(captured, 'card-removed').map((e) => e.reader)).toEqual([READER]);
+
+    fake.setCard(READER, null); // removed during the outage
+    fake.listRv = SCARD_S_SUCCESS;
+    captured.length = 0;
+    await poll();
+    expect(events(captured, 'card-inserted')).toHaveLength(0);
+    expect(events(captured, 'readers').at(-1)?.readers.map((r) => r.cardPresent)).toEqual([false]);
+  });
+
+  it('marks "service down" caused by no reader at all (Windows trigger start, CARD-8)', async () => {
+    fake.establishRv = SCARD_E_NO_SERVICE;
+    await begin();
+    const svc = events(captured, 'service').at(-1);
+    expect(svc).toMatchObject({ state: 'unavailable', noReaders: process.platform === 'win32' });
+  });
+
+  it('a swap between two polls (PRESENT never cleared) is reported as card-changed (CARD-10)', async () => {
+    const atr = new Uint8Array([0x3b, 0x8f, 0x80, 0x01]);
+    fake.readerNames = [READER];
+    fake.setCard(READER, atr);
+    fake.bump(READER); // count 1: one insertion
+    await begin();
+    captured.length = 0;
+
+    await poll(); // nothing changed
+    expect(events(captured, 'card-changed')).toHaveLength(0);
+
+    fake.bump(READER, 2); // out + in between two polls
+    await poll();
+    expect(events(captured, 'card-changed').map((e) => e.reader)).toEqual([READER]);
+    expect(events(captured, 'card-removed')).toHaveLength(0);
+    expect(events(captured, 'card-inserted')).toHaveLength(0);
+
+    captured.length = 0;
+    await poll(); // the new count is the new baseline
+    expect(events(captured, 'card-changed')).toHaveLength(0);
+  });
+
+  it('a long run of blocking transmits gives the event loop a turn (CARD-13)', async () => {
+    vi.useRealTimers();
+    fake.readerNames = [READER];
+    fake.setCard(READER, new Uint8Array([0x3b, 0x8f, 0x80, 0x01]));
+    await begin();
+    const conn = await backend.connect(READER);
+    fake.transmitDelayMs = 5;
+    let turns = 0;
+    let on = true;
+    const tick = (): void => {
+      if (!on) return;
+      turns++;
+      setImmediate(tick);
+    };
+    setImmediate(tick);
+    // ~150 ms of synchronous native calls: without yielding, not one macrotask
+    // (window messages, timers, IPC) would run until the whole read finished.
+    for (let i = 0; i < 30; i++) await conn.transmit(Uint8Array.from([0xff, 0xca, 0x00, 0x00, 0x00]));
+    on = false;
+    fake.transmitDelayMs = 0;
+    expect(turns).toBeGreaterThanOrEqual(2);
+    await conn.disconnect();
+  });
+
+  // Real PaSoRi 2026-11-13: "another app is using the reader" flashed after every read of ours.
+  it('INUSE caused by our own connection (and just after it) is not reported; a lasting foreign one is', async () => {
+    fake.readerNames = [READER];
+    fake.setCard(READER, new Uint8Array([0x3b, 0x8f, 0x80, 0x01]));
+    await begin();
+
+    const conn = await backend.connect(READER);
+    fake.inUse.add(READER); // Windows flags our own handle
+    await poll();
+    await poll();
+    expect(backend.readers()[0].inUse).toBe(false);
+    await conn.disconnect();
+    await poll(); // still set right after we closed: grace
+    expect(backend.readers()[0].inUse).toBe(false);
+    fake.inUse.delete(READER);
+    await poll();
+
+    // a foreign process: one poll is a momentary probe, two in a row is real
+    vi.advanceTimersByTime(1500);
+    fake.inUse.add(READER);
+    await poll();
+    expect(backend.readers()[0].inUse).toBe(false);
+    await poll();
+    expect(backend.readers()[0].inUse).toBe(true);
+    fake.inUse.delete(READER);
+    await poll();
+    expect(backend.readers()[0].inUse).toBe(false);
+  });
+
+  it('a counter change during / right after our own connection is not a swap', async () => {
+    const atr = new Uint8Array([0x3b, 0x8f, 0x80, 0x01]);
+    fake.readerNames = [READER];
+    fake.setCard(READER, atr);
+    await begin();
+    captured.length = 0;
+
+    const conn = await backend.connect(READER);
+    fake.bump(READER); // whatever our own session does to the counter
+    await poll(); // connection still open: not judged
+    expect(events(captured, 'card-changed')).toHaveLength(0);
+    await conn.disconnect(); // baseline re-read at close
+    await poll();
+    expect(events(captured, 'card-changed')).toHaveLength(0);
+
+    // ...but a swap after that is still seen
+    fake.bump(READER, 2);
+    await poll();
+    expect(events(captured, 'card-changed').map((e) => e.reader)).toEqual([READER]);
   });
 
   it('keeps "no readers" (SCARD_E_NO_READERS_AVAILABLE) as a benign empty list, not a teardown', async () => {

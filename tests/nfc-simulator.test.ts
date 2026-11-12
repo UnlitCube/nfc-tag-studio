@@ -11,8 +11,8 @@ import {
   splitResponse,
 } from '../src/main/nfc/apdu';
 import { wrapRawCommand, unwrapRawResponse } from '../src/main/nfc/driver';
-import { ntagGetVersion, ntagRead, ntagWrite } from '../src/main/nfc/apdu';
-import { encodeAccessBits, kindFromVersion, kindHintFromAtr, mifareTrailerBlock } from '../src/shared/tags';
+import { ntagFastRead, ntagGetVersion, ntagPwdAuth, ntagRead, ntagWrite } from '../src/main/nfc/apdu';
+import { encodeAccessBits, kindFromVersion, kindHintFromAtr, mifareTrailerBlock, ntagPages } from '../src/shared/tags';
 import { VIRTUAL_READER_NAME } from '../src/shared/reader';
 import { hexToBytes } from '../src/shared/hex';
 
@@ -147,5 +147,50 @@ describe('simulator raw NFC-A (acr122 framing)', () => {
     const resp = await conn.transmit(wrapRawCommand('acr122', ntagGetVersion()));
     // The MIFARE virtual tag does not answer NTAG native commands -> PN532 error.
     expect(() => unwrapRawResponse('acr122', resp)).toThrow();
+  });
+});
+
+describe('simulator NTAG password behaviour matches hardware (2026-11-12 review R-WRITE-2)', () => {
+  it('PWD and PACK always read back as 00 (READ, FAST_READ and FF B0), PWD_AUTH still uses them', async () => {
+    const backend = createSimulatorBackend();
+    await backend.start(() => {});
+    backend.newTag('NTAG213');
+    const p = ntagPages('NTAG213');
+    const conn = await backend.connect(VIRTUAL_READER_NAME);
+    for (const [page, hex] of [
+      [p.pwd, '12345678'],
+      [p.pack, 'ABCD0000'],
+    ] as const) {
+      expect(isSuccessSw(splitResponse(await conn.transmit(apduUpdateBinary(page, hexToBytes(hex)))).sw)).toBe(true);
+    }
+    // READ from CFG1 covers CFG1, PWD, PACK and wraps to page 0
+    const read = unwrapRawResponse('acr122', await conn.transmit(wrapRawCommand('acr122', ntagRead(p.cfg1))));
+    expect(Array.from(read.subarray(4, 12))).toEqual([0, 0, 0, 0, 0, 0, 0, 0]);
+    const fast = unwrapRawResponse('acr122', await conn.transmit(wrapRawCommand('acr122', ntagFastRead(p.pwd, p.pack))));
+    expect(Array.from(fast)).toEqual([0, 0, 0, 0, 0, 0, 0, 0]);
+    const bin = splitResponse(await conn.transmit(apduReadBinary(p.pwd, 16)));
+    expect(Array.from(bin.data.subarray(0, 8))).toEqual([0, 0, 0, 0, 0, 0, 0, 0]);
+    // the stored password still authenticates, and PWD_AUTH answers the stored PACK
+    const pack = unwrapRawResponse('acr122', await conn.transmit(wrapRawCommand('acr122', ntagPwdAuth(hexToBytes('12345678')))));
+    expect(Array.from(pack)).toEqual([0xab, 0xcd]);
+  });
+
+  it('AUTH0 / PROT written in a session take effect from the next session (re-activation)', async () => {
+    const backend = createSimulatorBackend();
+    await backend.start(() => {});
+    backend.newTag('NTAG215');
+    const p = ntagPages('NTAG215');
+    const first = await backend.connect(VIRTUAL_READER_NAME);
+    await first.transmit(apduUpdateBinary(p.cfg1, hexToBytes('80050000'))); // PROT
+    await first.transmit(apduUpdateBinary(p.cfg0, hexToBytes('04000004'))); // AUTH0 = 4
+    // same session: still open (the read-back of a password setup can verify)
+    expect(isSuccessSw(splitResponse(await first.transmit(apduReadBinary(4, 16))).sw)).toBe(true);
+    expect(isSuccessSw(splitResponse(await first.transmit(apduUpdateBinary(5, hexToBytes('01020304')))).sw)).toBe(true);
+    await first.disconnect();
+    // next session: read and write of pages >= AUTH0 refused
+    const next = await backend.connect(VIRTUAL_READER_NAME);
+    expect(isSuccessSw(splitResponse(await next.transmit(apduReadBinary(4, 16))).sw)).toBe(false);
+    expect(isSuccessSw(splitResponse(await next.transmit(apduUpdateBinary(5, hexToBytes('01020304')))).sw)).toBe(false);
+    expect(isSuccessSw(splitResponse(await next.transmit(apduReadBinary(3, 16))).sw)).toBe(true);
   });
 });

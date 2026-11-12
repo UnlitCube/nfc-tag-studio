@@ -112,7 +112,8 @@ export function NdefRecordsEditor({ records, onChange, allowPlaceholders, capaci
   }, []);
 
   const addRecord = (kind: RecordKind) => {
-    onChange([...records, emptyDraft(kind)]);
+    // E2E-UX-6: a new text record is in the display language (a Japanese screen writes Japanese).
+    onChange([...records, emptyDraft(kind, { lang })]);
     setMenuOpen(false);
   };
   const updateAt = (index: number, next: NdefRecordDraft) => onChange(records.map((r, i) => (i === index ? next : r)));

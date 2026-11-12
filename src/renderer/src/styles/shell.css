@@ -67,8 +67,8 @@
   display: flex;
   align-items: center;
   gap: var(--space-2);
-  height: 34px;
-  padding: 0 var(--space-2);
+  min-height: 40px;
+  padding: var(--space-1) var(--space-2);
   border: none;
   border-radius: var(--radius);
   background: transparent;
@@ -99,12 +99,47 @@
 .nav-item:focus-visible {
   box-shadow: 0 0 0 2px var(--nav-accent);
 }
-.nav-live {
+.nav-item-text {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  line-height: 1.25;
+}
+.nav-item-label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+/* Short explanation of the jargon under each label (FIRST-15). On the active /
+   hovered item it switches to --nav-text: --nav-text-faint on --nav-active-bg is
+   below 4.5:1 in the dark theme (tests/contrast.test.ts). */
+.nav-item-desc {
+  font-size: var(--fs-micro);
+  color: var(--nav-text-faint);
+  font-weight: 400;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.nav-item:hover .nav-item-desc,
+.nav-item[aria-current='page'] .nav-item-desc {
+  color: var(--nav-text);
+}
+.nav-live,
+.nav-dirty {
+  flex: none;
   width: 8px;
   height: 8px;
   border-radius: 50%;
+}
+.nav-live {
   background: var(--ok-on-dark);
-  box-shadow: 0 0 0 3px rgba(74, 194, 107, 0.25);
+  box-shadow: 0 0 0 3px var(--nav-active-bg);
+}
+/* Unsaved changes in the open document (FIRST-7). */
+.nav-dirty {
+  background: var(--warn-on-dark);
+  box-shadow: 0 0 0 3px var(--nav-active-bg);
 }
 .nav-footer {
   padding: var(--space-2);
@@ -130,6 +165,28 @@
   align-items: center;
   gap: 6px;
   min-width: 0;
+  flex: 0 1 auto;
+}
+.status-item > svg {
+  flex: none;
+}
+.status-text {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.status-neutral > svg:first-child {
+  color: var(--statusbar-fg);
+}
+.status-info > svg:first-child {
+  color: var(--nav-accent);
+}
+/* Problems are also told in words (not colour only): the text itself is tinted. */
+.status-warn .status-text {
+  color: var(--warn-on-dark);
+}
+.status-danger .status-text {
+  color: var(--danger-on-dark);
 }
 .status-ok > svg:first-child {
   color: var(--ok-on-dark);
@@ -148,4 +205,56 @@
   align-items: center;
   gap: 4px;
   color: var(--warn-on-dark);
+}
+
+/* ---------- first-run guide ---------- */
+.onb-heading {
+  font-size: var(--fs-md);
+  font-weight: 650;
+}
+.onb-steps {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+.onb-step {
+  display: flex;
+  gap: var(--space-3);
+  align-items: flex-start;
+}
+.onb-step-icon {
+  flex: none;
+  width: 32px;
+  height: 32px;
+  border-radius: var(--radius);
+  display: grid;
+  place-items: center;
+  background: var(--accent-soft);
+  color: var(--accent-text);
+}
+.onb-step-title {
+  font-weight: 650;
+  margin-bottom: 2px;
+}
+
+/* ---------- back from a resolve trip (ResolveReturn, R-UX-9) ---------- */
+.resolve-return {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  padding-top: var(--space-3);
+  border-top: 1px solid var(--border);
+}
+.resolve-return-actions {
+  flex-wrap: wrap;
+}
+/* In a run bar: one row, no divider. */
+.resolve-return.is-compact {
+  flex-direction: row;
+  align-items: center;
+  padding-top: 0;
+  border-top: none;
 }

@@ -2,6 +2,8 @@
 // Registers operator-held keys and the public standard keys. The app never
 // recovers keys (invariant I3) and never shows a stored key value (I4): the
 // list shows masked values only; the raw value appears only in the add input.
+// D9 (2026-11-12): automatic reading tries only the built-in standard keys; the
+// registered keys are tried by reads the operator starts (said on this screen).
 import { useEffect, useState } from 'react';
 import { KeyRound, Plus, ShieldCheck, Trash2 } from 'lucide-react';
 import { Badge, Button, Callout, Card, Field, Page, PageHeader, TextInput } from '../../components/ui';
@@ -10,6 +12,7 @@ import { api } from '../../lib/api';
 import { useT } from '../../i18n';
 import type { MifareKeyEntry } from '@shared/types';
 import { validateKeyHex, type KeyErrorReason } from './keyform';
+import { ResolveReturn } from '../../components/shell/ResolveReturn';
 
 type FormError = KeyErrorReason | 'label';
 
@@ -87,7 +90,11 @@ export function KeysView() {
 
       <div className="stack-lg">
         <Callout tone="info" icon={ShieldCheck} title={t('keys.explainTitle')}>
-          {t('keys.explainBody')}
+          <div>{t('keys.explainBody')}</div>
+          {/* D9 (review R-UX-4): placing a tag never makes it try the operator's keys. */}
+          <div style={{ marginTop: 'var(--space-2)' }} data-testid="keys-auto-read-note">
+            {t('keys.autoReadNote')}
+          </div>
         </Callout>
 
         <Card title={t('keys.list.title')} icon={KeyRound}>
@@ -180,6 +187,8 @@ export function KeysView() {
               </Button>
             </div>
           </form>
+          {/* R-UX-9: the way back (and "read again") when the operator came here from the home screen. */}
+          <ResolveReturn view="keys" />
         </Card>
       </div>
     </Page>

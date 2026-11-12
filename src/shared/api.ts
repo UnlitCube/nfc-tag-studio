@@ -78,6 +78,8 @@ export interface NfcApi {
   getReaderStatus(): Promise<ReaderStatus>;
   onReaderStatus(cb: (s: ReaderStatus) => void): () => void;
   refreshReaders(): Promise<void>;
+  /** Identify the tag on the active reader again (the "try again" button for cardState 'error' / 'unsupported'). */
+  reidentify(): Promise<void>;
   /** null = automatic selection. */
   selectReader(name: string | null): Promise<void>;
   setDriverMode(mode: ReaderDriverMode): Promise<void>;
@@ -136,6 +138,7 @@ export const INVOKE_CHANNELS = {
   saveSettings: 'settings:save',
   getReaderStatus: 'reader:getStatus',
   refreshReaders: 'reader:refresh',
+  reidentify: 'reader:reidentify',
   selectReader: 'reader:select',
   setDriverMode: 'reader:setDriverMode',
   setManualKind: 'reader:setManualKind',

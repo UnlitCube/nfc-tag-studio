@@ -76,6 +76,20 @@ const TEXT_PAIRS: [string, string, number][] = [
   ['--nav-text', '--nav-bg', 4.5],
   ['--nav-text-active', '--nav-bg', 4.5],
   ['--statusbar-fg', '--statusbar-bg', 4.5],
+  // Nav: the short explanation under each item (shell.css .nav-item-desc). On the
+  // active item it switches to --nav-text (faint-on-active is < 4.5 in dark).
+  ['--nav-text-faint', '--nav-bg', 4.5],
+  ['--nav-text', '--nav-active-bg', 4.5],
+  ['--nav-text-active', '--nav-active-bg', 4.5],
+  // Status bar: problems are tinted text (shell.css .status-warn / .status-danger .status-text).
+  ['--warn-on-dark', '--statusbar-bg', 4.5],
+  ['--danger-on-dark', '--statusbar-bg', 4.5],
+  ['--ok-on-dark', '--statusbar-bg', 4.5],
+  ['--nav-accent', '--statusbar-bg', 4.5],
+  // Home: guide icons and badges sit on their soft backgrounds; the guide block is --surface-inset.
+  ['--text', '--surface-inset', 4.5],
+  ['--text-dim', '--surface-inset', 4.5],
+  ['--accent-text', '--surface-inset', 4.5],
   // non-text (3:1)
   ['--border-input', '--surface', 3.0],
   ['--accent', '--surface', 3.0],

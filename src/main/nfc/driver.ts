@@ -29,6 +29,7 @@ import {
   swHex,
   swMeansDenied,
   type MifareKeyType,
+  type Sw,
 } from './apdu';
 
 // ACR122U / Touchatag and other PN532-based readers.
@@ -152,7 +153,12 @@ export class ReaderIo {
     return data;
   }
 
-  async readBinary(block: number, length: number): Promise<Uint8Array> {
+  /**
+   * FF B0 that never throws for a refusing status word: returns the data and the
+   * SW, so a caller can tell "the reader / card answered no" (any SW) from "no
+   * answer at all" (the transport throws: CARD_REMOVED, CARD_UNRESPONSIVE, ...).
+   */
+  async readBinarySw(block: number, length: number): Promise<{ data: Uint8Array; sw: Sw }> {
     let { data, sw } = splitResponse(await this.conn.transmit(apduReadBinary(block, length)));
     // 6C XX = wrong Le; the reader wants exactly XX bytes. Some readers (e.g. the
     // Sony PaSoRi RC-S3xx) only accept a 16-byte FF B0 read and reject a 4-byte
@@ -161,7 +167,12 @@ export class ReaderIo {
     if (sw.sw1 === 0x6c && sw.sw2 !== 0x00) {
       ({ data, sw } = splitResponse(await this.conn.transmit(apduReadBinary(block, sw.sw2))));
     }
-    if (isSuccessSw(sw)) return data.length > length ? data.subarray(0, length) : data;
+    return { data: isSuccessSw(sw) && data.length > length ? data.subarray(0, length) : data, sw };
+  }
+
+  async readBinary(block: number, length: number): Promise<Uint8Array> {
+    const { data, sw } = await this.readBinarySw(block, length);
+    if (isSuccessSw(sw)) return data;
     if (swMeansDenied(sw)) throw new OpError('ACCESS_DENIED', `block ${block}`);
     throw new OpError('READ_FAILED', `block ${block}`);
   }

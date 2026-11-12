@@ -492,14 +492,14 @@ export function buildSchemaWrites(schema: DataSchema, kind: TagKind, data: Uint8
   if (schema.area.mode === 'raw') {
     const start = schema.area.startUnit;
     if (isForbiddenUnit(kind, start) || isProtectedUnit(kind, start)) {
-      throw new SchemaValueError('_area', `保護された領域から始まっています（単位 ${start}）`);
+      throw new SchemaValueError('_area', `保護された領域から始まっています（${spec.unit === 'page' ? 'ページ' : 'ブロック'} ${start}）`);
     }
     const writes: UnitWrite[] = [];
     let idx = 0;
     for (const u of rawDataUnits(kind, start)) {
       if (idx >= area.length) break;
       if (isForbiddenUnit(kind, u) || isProtectedUnit(kind, u)) {
-        throw new SchemaValueError('_area', `保護された領域には書き込めません（単位 ${u}）`);
+        throw new SchemaValueError('_area', `保護された領域には書き込めません（${spec.unit === 'page' ? 'ページ' : 'ブロック'} ${u}）`);
       }
       const base = u * spec.unitSize;
       const cur = Uint8Array.from(data.subarray(base, base + spec.unitSize));

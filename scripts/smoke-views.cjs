@@ -12,7 +12,9 @@ const VIEWS = ['home', 'issue', 'ndef', 'schema', 'hex', 'backup', 'log', 'keys'
   const outDir = resolve(process.argv[2] || join(os.tmpdir(), 'nfcts-views'));
   mkdirSync(outDir, { recursive: true });
   const userData = mkdtempSync(join(os.tmpdir(), 'nfcts-views-'));
-  const env = { ...process.env };
+  // NFCTS_NO_PCSC: virtual reader only - never touch the real reader / tags on this PC (D8).
+  // NFCTS_SMOKE: the quit confirmation answers itself, so app.close() cannot hang.
+  const env = { ...process.env, NFCTS_NO_PCSC: '1', NFCTS_SMOKE: '1' };
   for (const k of Object.keys(env)) if (k.toUpperCase() === 'ELECTRON_RUN_AS_NODE') delete env[k];
   const app = await electron.launch({ args: [root, `--user-data-dir=${userData}`], env, cwd: root });
   const allErrors = {};

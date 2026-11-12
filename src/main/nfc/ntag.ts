@@ -3,30 +3,31 @@
 // Reading: GET_VERSION identifies the model; pages are read 4 at a time with the
 // native READ (raw drivers) or FF B0 read-binary (storage driver). Pages that a
 // password protects and that we cannot authenticate are left zero-filled and
-// marked 'denied' - a read never fails as a whole. The NFC counter and the
-// originality signature are display-only extras (raw drivers only).
+// marked 'denied'. A tag that leaves the reader mid-read rejects the whole read
+// with CARD_REMOVED (2026-11-12 UX audit CARD-4: a half-read image must never be
+// returned as a success). The NFC counter and the originality signature are
+// display-only extras (raw drivers only).
 //
 // Writing: one 4-byte page per native WRITE / FF D6 update-binary, strictly in
 // the order the caller planned (UnitWrite[]). Policy (forbidden / protected /
-// invalid access bits) is enforced by the service before we are called.
+// invalid access bits) is enforced by the service before we are called. A tag
+// that leaves mid-write stops the loop (`aborted`, `notAttempted`).
 
 import type { TagKind } from '@shared/tags';
 import { isNtag, specFor } from '@shared/tags';
 import type { NtagExtras, UnitStatus, UnitWrite } from '@shared/types';
 import { bytesToHex, hexToBytes } from '@shared/hex';
 import { OpError } from '../errors';
-import { NTAG_ACK, ntagGetVersion, ntagPwdAuth, ntagRead, ntagReadCnt, ntagReadSig, ntagWrite } from './apdu';
+import { isSuccessSw, NTAG_ACK, ntagGetVersion, ntagPwdAuth, ntagRead, ntagReadCnt, ntagReadSig, ntagWrite } from './apdu';
 import type { ReaderIo } from './driver';
+import { isLinkLost, PresenceGuard, readChunk, runUnitWrites, type UnitWriteOutcome } from './unit-ops';
+
+export type { UnitWriteOutcome } from './unit-ops';
 
 export interface NtagReadResult {
   data: Uint8Array;
   unitStatus: UnitStatus[];
   extras: NtagExtras;
-}
-
-export interface UnitWriteOutcome {
-  written: number[];
-  failed: { unit: number; error: string }[];
 }
 
 /** GET_VERSION (8 bytes) or null when unavailable (storage driver or no answer). */
@@ -41,11 +42,17 @@ export async function ntagGetVersionBytes(io: ReaderIo): Promise<Uint8Array | nu
 }
 
 async function ntagPwdAuthenticate(io: ReaderIo, password: string | undefined): Promise<void> {
-  if (!password || !io.rawCommands) return;
+  if (!password) return;
+  // A storage reader (PaSoRi) cannot send PWD_AUTH. Never skip the password
+  // silently: the operator would be told the pages "need a password" although
+  // they gave it (2026-11-12 review R-UX-1, D11). The service refuses earlier;
+  // this is the backstop for any other caller.
+  if (!io.rawCommands) throw new OpError('READER_NO_AUTH', 'storage driver: no PWD_AUTH');
   try {
     const pwd = hexToBytes(password);
     if (pwd.length === 4) await io.raw(ntagPwdAuth(pwd));
-  } catch {
+  } catch (e) {
+    if (isLinkLost(e)) throw e;
     // Wrong / unparseable password -> protected pages stay 'denied'.
   }
 }
@@ -57,28 +64,55 @@ export async function readNtagPage(io: ReaderIo, page: number): Promise<Uint8Arr
   return chunk.subarray(0, 4);
 }
 
+/**
+ * The presence check of R-MAIN-3 for NTAG: re-read `page` (one this tag already
+ * answered, e.g. the CC page the identification read). Storage readers only -
+ * on a raw driver a refusal is the tag's own NAK (it answered, so it is there),
+ * and a probe after a NAK would hit a tag that went back to IDLE.
+ */
+function ntagGuard(io: ReaderIo, probePage: number | null | undefined): PresenceGuard {
+  if (io.rawCommands || probePage === null || probePage === undefined) return new PresenceGuard(null);
+  return new PresenceGuard(async () => {
+    const { data, sw } = await io.readBinarySw(probePage, 16);
+    return isSuccessSw(sw) && data.length >= 4;
+  });
+}
+
+export interface NtagOpOptions {
+  password?: string;
+  /**
+   * A page this tag is known to answer (storage readers: the CC page 3 when the
+   * identification read it). Enables the "did the tag leave?" check on refusals.
+   * null / undefined = no check.
+   */
+  probePage?: number | null;
+}
+
 /** Read the whole NTAG image. `kind` must be an NTAG model. */
-export async function readNtag(io: ReaderIo, kind: TagKind, opts: { password?: string }): Promise<NtagReadResult> {
+export async function readNtag(io: ReaderIo, kind: TagKind, opts: NtagOpOptions): Promise<NtagReadResult> {
   if (!isNtag(kind)) throw new OpError('INTERNAL', 'readNtag called for a non-NTAG kind');
   const spec = specFor(kind);
   const pages = spec.unitCount;
   const data = new Uint8Array(pages * 4);
   const unitStatus: UnitStatus[] = new Array(pages).fill('unread');
+  const guard = ntagGuard(io, opts.probePage);
 
   await ntagPwdAuthenticate(io, opts.password);
 
   for (let page = 0; page < pages; page += 4) {
     const count = Math.min(4, pages - page);
-    try {
+    // Throws CARD_REMOVED (whole read fails) when the tag left the reader.
+    const r = await readChunk(io, async () => {
       const chunk = io.rawCommands ? await io.raw(ntagRead(page)) : await io.readBinary(page, 16);
       if (chunk.length < count * 4) throw new OpError('ACCESS_DENIED', `page ${page}`);
-      data.set(chunk.subarray(0, count * 4), page * 4);
-      for (let q = 0; q < count; q++) unitStatus[page + q] = 'ok';
-    } catch (e) {
-      const st: UnitStatus = e instanceof OpError && e.code === 'ACCESS_DENIED' ? 'denied' : 'error';
-      for (let q = 0; q < count; q++) unitStatus[page + q] = st;
-    }
+      return chunk;
+    });
+    if (r.status === 'ok') data.set(r.data.subarray(0, count * 4), page * 4);
+    for (let q = 0; q < count; q++) unitStatus[page + q] = r.status;
+    // A refused chunk on a storage reader: protected, or the tag just left? (R-MAIN-3)
+    if (r.status !== 'ok') await guard.refused();
   }
+  await guard.finish();
 
   const extras = await readNtagExtras(io);
   return { data, unitStatus, extras };
@@ -110,16 +144,21 @@ async function readNtagExtras(io: ReaderIo): Promise<NtagExtras> {
 /**
  * Write pages in order. Uses FAST_READ nowhere; each page is one WRITE/FF D6.
  * Returns which units were written and which failed (never throws for a single
- * failed page - the service aggregates the result).
+ * failed page - the service aggregates the result). When the tag leaves the
+ * reader the loop stops: `aborted` is set and the untried pages are listed.
  */
-export async function writeNtagPages(io: ReaderIo, writes: UnitWrite[], opts: { password?: string }): Promise<UnitWriteOutcome> {
-  const written: number[] = [];
-  const failed: { unit: number; error: string }[] = [];
+export async function writeNtagPages(io: ReaderIo, writes: UnitWrite[], opts: NtagOpOptions): Promise<UnitWriteOutcome> {
+  try {
+    await ntagPwdAuthenticate(io, opts.password);
+  } catch (e) {
+    // The tag left before the first page: nothing was written.
+    if (isLinkLost(e)) return { written: [], failed: [], aborted: e.code, notAttempted: writes.map((w) => w.unit) };
+    throw e;
+  }
 
-  await ntagPwdAuthenticate(io, opts.password);
-
-  for (const w of writes) {
-    try {
+  return runUnitWrites(
+    writes,
+    async (w) => {
       if (w.data.length !== 4) throw new OpError('WRITE_FAILED', `page ${w.unit} needs 4 bytes`);
       if (io.rawCommands) {
         const ack = await io.raw(ntagWrite(w.unit, w.data));
@@ -127,10 +166,8 @@ export async function writeNtagPages(io: ReaderIo, writes: UnitWrite[], opts: { 
       } else {
         await io.updateBinary(w.unit, w.data);
       }
-      written.push(w.unit);
-    } catch (e) {
-      failed.push({ unit: w.unit, error: e instanceof OpError ? e.code : 'WRITE_FAILED' });
-    }
-  }
-  return { written, failed };
+    },
+    undefined,
+    ntagGuard(io, opts.probePage),
+  );
 }

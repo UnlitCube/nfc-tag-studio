@@ -10,7 +10,7 @@ export default defineMessages({
       'このスキーマはタグのデータ領域だけに書き込みます。UID（製造番号）は読み取り専用で、スキーマでは変更・複製できません。複製されるのはデータ領域だけです。',
 
     'schema.new': '新規作成',
-    'schema.import': 'JSON を読み込み',
+    'schema.import': 'JSON を開く',
     'schema.export': 'JSON に書き出し',
     'schema.save': 'スキーマを保存',
     'schema.toIssue': '発行へ',
@@ -31,7 +31,7 @@ export default defineMessages({
     'schema.newDialog.start': 'ひな形',
     'schema.newDialog.blank': '空のスキーマ',
     'schema.newDialog.create': '作成',
-    'schema.newDialog.presetsUnavailable': 'ひな形を読み込めませんでした（空のスキーマから始められます）',
+    'schema.newDialog.presetsUnavailable': 'ひな形を用意できませんでした（空のスキーマから始められます）',
 
     'schema.meta.title': '基本情報',
     'schema.meta.name': 'スキーマ名',
@@ -46,7 +46,6 @@ export default defineMessages({
     'schema.area.startUnit': '開始{unit}',
     'schema.area.page': 'ページ',
     'schema.area.block': 'ブロック',
-    'schema.area.unit': '単位',
     'schema.area.recordType': 'レコード型',
     'schema.area.mime': 'MIME タイプ',
     'schema.area.external': '外部タイプ',
@@ -133,7 +132,7 @@ export default defineMessages({
 
     'schema.validation.title': '検証',
     'schema.validation.ok': '問題は見つかりませんでした。',
-    'schema.validation.unavailable': '検証モジュールを読み込めませんでした。',
+    'schema.validation.unavailable': '検証の機能を準備できませんでした。',
     'schema.validation.summary': 'エラー {errors} 件・警告 {warnings} 件',
     'schema.validation.schemaLevel': '全体',
 
@@ -154,8 +153,8 @@ export default defineMessages({
 
     'schema.toast.saved': 'スキーマを保存しました',
     'schema.toast.exported': 'JSON に書き出しました',
-    'schema.toast.imported': 'スキーマを読み込みました',
-    'schema.toast.importFailed': 'スキーマを読み込めませんでした',
+    'schema.toast.imported': 'スキーマのファイルを開きました',
+    'schema.toast.importFailed': 'スキーマのファイルを開けませんでした',
     'schema.toast.needName': 'スキーマ名を入力してください',
     'schema.toast.handoffSaved': '保存して発行画面へ移動しました',
   },
@@ -166,7 +165,7 @@ export default defineMessages({
       "This schema writes only to the tag's data area. The UID (serial number) is read-only; a schema can never change or clone it — only the data area is copied.",
 
     'schema.new': 'New',
-    'schema.import': 'Import JSON',
+    'schema.import': 'Open JSON',
     'schema.export': 'Export JSON',
     'schema.save': 'Save schema',
     'schema.toIssue': 'Go to issuing',
@@ -202,7 +201,6 @@ export default defineMessages({
     'schema.area.startUnit': 'Start {unit}',
     'schema.area.page': 'page',
     'schema.area.block': 'block',
-    'schema.area.unit': 'unit',
     'schema.area.recordType': 'Record type',
     'schema.area.mime': 'MIME type',
     'schema.area.external': 'External type',
@@ -310,8 +308,8 @@ export default defineMessages({
 
     'schema.toast.saved': 'Schema saved',
     'schema.toast.exported': 'Exported to JSON',
-    'schema.toast.imported': 'Schema imported',
-    'schema.toast.importFailed': 'Could not import the schema',
+    'schema.toast.imported': 'Opened the schema file',
+    'schema.toast.importFailed': 'Could not open the schema file',
     'schema.toast.needName': 'Enter a schema name',
     'schema.toast.handoffSaved': 'Saved and opened the issuing screen',
   },

@@ -1,125 +1,296 @@
-// NDEF view: define/read an NDEF message for the current tag (or a file / new),
-// preview the encoded bytes, write it to the tag's data area, or hand it to the
-// batch-issue screen as a template. Owner: agent "renderer-ndef".
+// NDEF view: take the NDEF of a tag (or an NDEF file / from scratch), compose the
+// records, preview the bytes, write them to the tag on the reader, or hand them
+// to batch issue as a template. Owner: agent "renderer-ndef".
 //
-// Invariant (I1): the UID is read-only. This view only ever writes the user
-// (data) area. Writing never changes or copies a UID - that is stated to the
-// operator in ndef.uidNote and in the write confirmation.
+// 2026-11-12 UX rework (WRITE-12 / FLOW-4 / FLOW-5 / FLOW-9 / FIRST-14 / WALK-5 / FLOW-16):
+//  - When the screen is shown and the open document is a tag read, its NDEF is
+//    taken over automatically (never over records the operator is editing - then
+//    a callout offers it instead). "Read from tag" really reads the tag.
+//  - The origin of the records is always shown (tag + time / file / new).
+//  - Writing ALWAYS goes to the tag on the reader and is planned from THAT tag's
+//    content, read right before writing (MIFARE: its own MAD; NTAG: its own CC).
+//    The confirmation names the tag (kind + UID) and what it holds now.
+//  - Zero records cannot be "written"; clearing is the separate "Erase NDEF".
+//  - Disabled buttons say why (tagOpBlock + useOpBlockText). The write result
+//    stays on screen (LastWriteCallout).
+//  - Keep-alive (App): the records, origin and saved-file row survive switching
+//    screens; nothing here re-initialises on mount.
+//
+// 2026-11-12 second round (E2E-UX-3/5/6, D9, D13): the erase confirmation's button
+// says "erase"; one "read this tag" in the "tag to write" card (not a second one
+// from TagOnReader); new text records take the display language (editor); an
+// unreadable MIFARE NDEF says that "Read from tag" tries the registered keys
+// (automatic reading tries only the standard keys); a write that cannot be
+// planned is shown in the card, not also as a toast over the buttons.
+//
+// Invariant (I1): the UID is read-only. Only the NDEF data area is written.
 import './ndef.css';
-import { useMemo, useState } from 'react';
-import { Download, FileText, Nfc, PenLine, Send, Upload } from 'lucide-react';
+import { useEffect, useMemo, useState } from 'react';
+import { Binary, Download, Eraser, FilePlus, FolderOpen, Nfc, PenLine, Send, Tag, Upload } from 'lucide-react';
 import type { TagKind } from '@shared/tags';
-import { TAG_KINDS, isFelica, isNtag, specFor } from '@shared/tags';
+import { TAG_KINDS, isFelica, isMifare, isNtag, specFor } from '@shared/tags';
 import type { NdefRecordDraft } from '@shared/ndef/types';
-import {
-  buildMifareNdefWrites,
-  buildType2UserArea,
-  decodeToDrafts,
-  encodeDrafts,
-  extractMifareNdef,
-  scanType2Tlvs,
-  wrapNdefTlv,
-} from '@shared/ndef';
-import type { UnitWrite, WriteRequest } from '@shared/types';
+import { decodeToDrafts, encodeDrafts } from '@shared/ndef';
+import type { WriteRequest } from '@shared/types';
 import { FILE_FILTERS } from '@shared/api';
-import { Badge, Button, Callout, Card, EmptyState, Field, KeyValue, Page, PageHeader, Segmented, Select } from '../../components/ui';
+import { Badge, Button, Callout, Card, Field, KeyValue, Page, PageHeader, Select } from '../../components/ui';
+import { TagOnReader, useOpBlockText } from '../../components/TagOnReader';
+import { LastWriteCallout } from '../../components/LastWriteCallout';
 import { useT } from '../../i18n';
-import { useAppStore } from '../../store/app';
+import type { TFunc } from '../../i18n';
+import { isDocDirty, useAppStore } from '../../store/app';
+import type { TagDoc } from '../../store/app';
 import { api, errorText } from '../../lib/api';
-import { writeWithConfirm } from '../../lib/ops';
+import { readCurrentTag, readTarget, writeWithConfirm } from '../../lib/ops';
+import { isCardReady, tagOpBlock } from '../../lib/readerState';
+import { useViewActive } from '../../lib/viewActive';
+import { beep } from '../../lib/sound';
 import { fileStamp, formatUid, kindLabel } from '../../lib/format';
+import { whenLabel } from '../backup/dumpMeta';
 import { NdefRecordsEditor } from './NdefRecordsEditor';
-import { bytesToHex, resolveWriteKind, userAreaToPages } from './ndefPages';
+import { bytesToHex, nominalCapacity, planNdefWrite, readImageNdef, supportsNdef } from './ndefPages';
+import type { ImageNdef, NdefWritePlan } from './ndefPages';
 
-type SourceKind = 'card' | 'file' | 'new';
+/** Where the records on screen came from. */
+type Origin =
+  | { type: 'none' }
+  /** The open document (a tag read / a dump file / a new document). */
+  | {
+      type: 'doc';
+      source: 'card' | 'file' | 'new';
+      uid: string;
+      kind: TagKind;
+      at: number;
+      name: string | null;
+      dirty: boolean;
+      state: ImageNdef['state'];
+      count: number;
+    }
+  /** An .ndef file. */
+  | { type: 'file'; name: string }
+  /** Started from scratch. */
+  | { type: 'new' }
+  /** Just written to this tag (the open document was another tag / a file and was kept). */
+  | { type: 'written'; uid: string; kind: TagKind; at: number };
+
+type Busy = null | 'read' | 'write' | 'erase' | 'file';
+
+/**
+ * Identity of one state of the open document. doc.revision alone is not enough:
+ * it restarts at 1 when a document is opened after the previous one was closed.
+ */
+function docKey(d: TagDoc): string {
+  return `${d.revision}|${d.image.readAt}|${d.image.uid}`;
+}
+
+function docLabel(t: TFunc, doc: TagDoc, lang: 'ja' | 'en'): string {
+  const { image, source } = doc;
+  if (source.type === 'card') {
+    return t('ndef.origin.tag', { uid: formatUid(image.uid), kind: kindLabel(image.kind), when: whenLabel(image.readAt, lang) });
+  }
+  if (source.type === 'file') return t('ndef.origin.docFile', { name: source.name });
+  return t('ndef.origin.docNew', { kind: kindLabel(image.kind) });
+}
+
+function stateLabel(t: TFunc, state: ImageNdef['state'], count: number): string {
+  switch (state) {
+    case 'records':
+      return t('ndef.state.records', { n: count });
+    case 'empty':
+      return t('ndef.state.empty');
+    case 'none':
+      return t('ndef.state.none');
+    case 'unreadable':
+      return t('ndef.state.unreadable');
+    case 'invalid':
+      return t('ndef.state.invalid');
+    case 'unsupported':
+      return t('ndef.felicaTitle');
+  }
+}
+
+function planErrorText(t: TFunc, plan: Extract<NdefWritePlan, { ok: false }>): string {
+  switch (plan.reason) {
+    case 'unsupported-kind':
+      return t('ndef.plan.unsupported');
+    case 'not-formatted':
+      return isNtag(plan.kind) ? t('ndef.plan.notFormattedNtag') : t('ndef.plan.notFormattedMifare');
+    case 'too-large':
+      return t('ndef.plan.tooLarge', { bytes: plan.messageBytes, cap: plan.capacity ?? 0 });
+    case 'unreadable':
+      return t('ndef.plan.unreadable');
+    case 'password':
+      return t('ndef.plan.password');
+    case 'locked':
+      return t('ndef.plan.locked');
+  }
+}
+
+function existingLine(t: TFunc, existing: ImageNdef): string {
+  switch (existing.state) {
+    case 'records':
+      return t('ndef.confirmExisting.records', { n: existing.drafts.length });
+    case 'empty':
+      return t('ndef.confirmExisting.empty');
+    case 'none':
+      return t('ndef.confirmExisting.none');
+    default:
+      return t('ndef.confirmExisting.invalid');
+  }
+}
 
 export function NdefView() {
   const t = useT();
+  const lang = useAppStore((s) => s.settings.language);
   const doc = useAppStore((s) => s.doc);
   const reader = useAppStore((s) => s.reader);
+  const busyOp = useAppStore((s) => s.busyOp);
+  const issueRunning = useAppStore((s) => s.issue.running);
   const setView = useAppStore((s) => s.setView);
   const handoffTo = useAppStore((s) => s.handoffTo);
   const toast = useAppStore((s) => s.toast);
   const toastError = useAppStore((s) => s.toastError);
+  const confirm = useAppStore((s) => s.confirm);
+  const setUnsavedDraft = useAppStore((s) => s.setUnsavedDraft);
+  const active = useViewActive();
+  const opText = useOpBlockText();
 
-  const [source, setSource] = useState<SourceKind>(doc ? 'card' : 'new');
   const [records, setRecords] = useState<NdefRecordDraft[]>([]);
+  const [origin, setOrigin] = useState<Origin>({ type: 'none' });
+  /** The operator changed the records since they were taken over. */
+  const [edited, setEdited] = useState(false);
+  /** docKey() of the document the records were last taken from (the automatic take-over runs once per document state). */
+  const [loadedKey, setLoadedKey] = useState<string | null>(null);
   const [newKind, setNewKind] = useState<TagKind>('NTAG213');
-  const [fileName, setFileName] = useState<string | null>(null);
+  const [busy, setBusy] = useState<Busy>(null);
+  const [lastSaved, setLastSaved] = useState<{ token: string; name: string } | null>(null);
+  /** Why the last write could not be planned on this tag (kept on screen, not only a toast). */
+  const [planIssue, setPlanIssue] = useState<{ uid: string; text: string } | null>(null);
 
-  // The card physically on the reader (if any) and the UID the write will target.
-  const card = reader?.card ?? null;
-  const expectedUid =
-    source === 'card' && doc && doc.source.type === 'card' ? doc.image.uid : (card?.uid ?? null);
+  const card = isCardReady(reader) ? reader!.card! : null;
+  const cardKind: TagKind | null = card?.kind ?? null;
+  const block = tagOpBlock(reader, { issueRunning, busyOp });
+  const locked = busy !== null;
 
-  // What the operator is composing for. For "new"/"file" this is their pick; for
-  // a loaded card it is the document's kind.
-  const selectedKind: TagKind = source === 'card' && doc ? doc.image.kind : newKind;
+  // ---- taking records over --------------------------------------------------
 
-  // The kind detected from the card on the reader, but only when it is the exact
-  // card we would write to (same UID). Its layout is authoritative: main re-reads
-  // only the UID before writing and judges forbidden/protected units by req.kind
-  // (DESIGN §3.1), so the write kind must match the real chip - never the pick
-  // from the dropdown (which could brick a smaller tag; see resolveWriteKind).
-  const detectedKind: TagKind | null = card && expectedUid !== null && card.uid === expectedUid ? card.kind : null;
+  function takeFromDoc(d: TagDoc, notify: boolean) {
+    setLoadedKey(docKey(d));
+    const r = readImageNdef(d.image);
+    if (r.state === 'unsupported') return; // FeliCa: the callout explains; keep what is on screen
+    const drafts = r.state === 'records' ? r.drafts : [];
+    setRecords(drafts);
+    setEdited(false);
+    setNewKind(d.image.kind);
+    setOrigin({
+      type: 'doc',
+      source: d.source.type,
+      uid: d.image.uid,
+      kind: d.image.kind,
+      at: d.image.readAt,
+      name: d.source.type === 'file' ? d.source.name : null,
+      dirty: isDocDirty(d),
+      state: r.state,
+      count: drafts.length,
+    });
+    if (!notify) return;
+    if (r.state === 'records') toast({ tone: 'ok', title: t('ndef.loaded', { n: drafts.length }) });
+    else if (r.state === 'unreadable') toast({ tone: 'warn', title: t('ndef.loadedUnreadable') });
+    else if (r.state === 'invalid') toast({ tone: 'warn', title: t('ndef.loadedInvalid') });
+    else toast({ tone: 'info', title: t('ndef.loadedEmpty') });
+  }
 
-  // targetKind drives both the capacity meter and the write plan; kindMismatch is
-  // set when the dropdown pick disagrees with the card on the reader.
-  const { kind: targetKind, mismatch: kindMismatch } = resolveWriteKind(selectedKind, detectedKind);
+  // Automatic take-over (WRITE-12 / FIRST-14): when this screen is shown and the
+  // open document is a tag read the records were not taken from yet - but never
+  // over records being edited, a file or a fresh start the operator chose.
+  const autoAllowed = !edited && (origin.type === 'none' || origin.type === 'doc' || origin.type === 'written');
+  useEffect(() => {
+    if (!active || !doc || doc.source.type !== 'card') return;
+    if (loadedKey === docKey(doc) || !supportsNdef(doc.image.kind) || !autoAllowed) return;
+    takeFromDoc(doc, false);
+    // takeFromDoc only reads its argument and stable store actions.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [active, doc, autoAllowed, loadedKey]);
 
-  const preview = useMemo(() => {
+  // Closing the window must not silently drop records being composed (WALK-13).
+  const hasDraft = edited && records.length > 0;
+  useEffect(() => {
+    setUnsavedDraft('ndef', hasDraft);
+  }, [hasDraft, setUnsavedDraft]);
+
+  const docPending =
+    !!doc && doc.source.type === 'card' && supportsNdef(doc.image.kind) && loadedKey !== docKey(doc) && !autoAllowed;
+  const docIsOrigin = !!doc && origin.type === 'doc' && loadedKey === docKey(doc) && !edited;
+
+  /** Ask before throwing away records the operator is editing. */
+  async function okToReplace(): Promise<boolean> {
+    if (!edited || records.length === 0) return true;
+    return confirm({
+      title: t('ndef.replace.title'),
+      message: t('ndef.replace.body', { n: records.length }),
+      details: [t('ndef.replace.detail')],
+      confirmLabel: t('ndef.replace.ok'),
+      cancelLabel: t('common.cancel'),
+      tone: 'warn',
+    });
+  }
+
+  function editRecords(next: NdefRecordDraft[]) {
+    setRecords(next);
+    setEdited(true);
+  }
+
+  async function readFromTag() {
+    if (!(await okToReplace())) return;
+    setBusy('read');
     try {
-      const msg = encodeDrafts(records);
-      return { hex: bytesToHex(msg), len: msg.length, error: null as string | null };
-    } catch (e) {
-      return { hex: '', len: 0, error: errorText(e).message };
-    }
-  }, [records]);
-
-  function loadFromTag() {
-    if (!doc) return;
-    const { kind, data } = doc.image;
-    let message: Uint8Array | null = null;
-    try {
-      if (isNtag(kind)) {
-        const spec = specFor(kind);
-        const start = spec.userStartUnit * spec.unitSize;
-        message = scanType2Tlvs(data.slice(start, start + spec.userBytes)).ndef;
-      } else {
-        message = extractMifareNdef(kind, data);
-      }
-    } catch (e) {
-      toastError(e, t('ndef.loadFailed'));
-      return;
-    }
-    if (!message) {
-      setRecords([]);
-      toast({ tone: 'info', title: t('ndef.loadedBlank') });
-      return;
-    }
-    try {
-      const drafts = decodeToDrafts(message);
-      setRecords(drafts);
-      toast({ tone: 'ok', title: t('ndef.loaded', { n: drafts.length }) });
-    } catch (e) {
-      toastError(e, t('ndef.loadFailed'));
+      const img = await readCurrentTag({});
+      const d = useAppStore.getState().doc;
+      // readCurrentTag already said "read"; the origin card shows what the NDEF holds.
+      if (img && d && d.image.uid === img.uid) takeFromDoc(d, false);
+    } finally {
+      setBusy(null);
     }
   }
 
-  async function openFile() {
+  async function takeOpenDoc() {
+    const d = useAppStore.getState().doc;
+    if (!d || !(await okToReplace())) return;
+    takeFromDoc(d, true);
+  }
+
+  async function openNdefFile() {
+    setBusy('file');
     try {
-      const res = await api.openFile({ title: t('ndef.openFile'), filters: [FILE_FILTERS.ndef] });
+      const res = await api.openFile({ title: t('ndef.openFile'), filters: [{ name: t('ndef.filter'), extensions: [...FILE_FILTERS.ndef.extensions] }] });
       if (!res) return;
-      const drafts = decodeToDrafts(res.bytes);
+      let drafts: NdefRecordDraft[];
+      try {
+        drafts = decodeToDrafts(res.bytes);
+      } catch {
+        toast({ tone: 'danger', title: t('ndef.fileFailed'), detail: t('ndef.fileFailedBody') });
+        return;
+      }
+      if (!(await okToReplace())) return;
       setRecords(drafts);
-      setFileName(res.name);
+      setEdited(false);
+      setOrigin({ type: 'file', name: res.name });
       toast({ tone: 'ok', title: t('ndef.fileLoaded', { name: res.name }) });
     } catch (e) {
-      toastError(e, t('ndef.loadFailed'));
+      toastError(e, t('ndef.fileFailed'));
+    } finally {
+      setBusy(null);
     }
   }
 
-  async function saveFile() {
+  async function startNew() {
+    if (!(await okToReplace())) return;
+    setRecords([]);
+    setEdited(false);
+    setOrigin({ type: 'new' });
+  }
+
+  async function saveNdefFile() {
     let bytes: Uint8Array;
     try {
       bytes = encodeDrafts(records);
@@ -127,16 +298,25 @@ export function NdefView() {
       toastError(e, t('ndef.encodeFailed'));
       return;
     }
+    setBusy('file');
     try {
       const res = await api.saveFile({
         title: t('ndef.saveFile'),
         defaultName: `ndef-${fileStamp()}.ndef`,
-        filters: [FILE_FILTERS.ndef],
+        filters: [{ name: t('ndef.filter'), extensions: [...FILE_FILTERS.ndef.extensions] }],
         bytes,
       });
-      if (res) toast({ tone: 'ok', title: t('toast.saved') });
+      if (res) {
+        setLastSaved({ token: res.token, name: res.name });
+        // The records are kept in that file now: not "unsaved", and not replaced by an automatic take-over.
+        setOrigin({ type: 'file', name: res.name });
+        setEdited(false);
+        toast({ tone: 'ok', title: t('ndef.saved'), detail: t('ndef.savedAs', { name: res.name }) });
+      }
     } catch (e) {
       toastError(e);
+    } finally {
+      setBusy(null);
     }
   }
 
@@ -148,174 +328,252 @@ export function NdefView() {
     handoffTo('issue', { kind: 'issue-ndef', records });
   }
 
-  async function writeToTag() {
+  // ---- writing -------------------------------------------------------------
+
+  const preview = useMemo(() => {
+    try {
+      const msg = encodeDrafts(records);
+      return { hex: bytesToHex(msg), len: msg.length, error: null as string | null };
+    } catch (e) {
+      return { hex: '', len: 0, error: errorText(e).message };
+    }
+  }, [records]);
+
+  // Capacity: the tag on the reader when there is one (the write follows it), else the operator's pick.
+  const capacityKind: TagKind = cardKind && supportsNdef(cardKind) ? cardKind : newKind;
+  const cardCap = cardKind ? nominalCapacity(cardKind) : null;
+  const overBy = cardCap !== null && !preview.error && preview.len > cardCap ? preview.len - cardCap : 0;
+  const cardIsFelica = !!cardKind && isFelica(cardKind);
+
+  const originUid =
+    origin.type === 'doc' && origin.source !== 'new' ? origin.uid : origin.type === 'written' ? origin.uid : null;
+  const otherTag = !!card && !!originUid && card.uid.toUpperCase() !== originUid.toUpperCase();
+
+  const writeWhy: string | null = block
+    ? opText(block)
+    : cardIsFelica
+      ? t('ndef.target.felica')
+      : preview.error
+        ? t('ndef.why.encode')
+        : records.length === 0
+          ? t('ndef.why.noRecords')
+          : overBy > 0
+            ? t('ndef.why.tooLarge', { kind: kindLabel(cardKind), over: overBy })
+            : null;
+  const eraseWhy: string | null = block ? opText(block) : cardIsFelica ? t('ndef.target.felica') : null;
+  const readWhy: string | null = block ? opText(block) : null;
+
+  async function writeToTag(erase: boolean) {
     let message: Uint8Array;
     try {
-      message = encodeDrafts(records);
+      message = encodeDrafts(erase ? [] : records);
     } catch (e) {
       toastError(e, t('ndef.encodeFailed'));
       return;
     }
-
-    if (!expectedUid) {
-      toast({ tone: 'warn', title: t('ndef.noTarget') });
-      return;
-    }
-    // Safety (I1/I5): the physical chip owns its memory layout. If the card on the
-    // reader is a different kind than the selected target, refuse rather than let
-    // main plan the write against the wrong layout (which could permanently lock
-    // or corrupt the tag). The capacity meter already reflects the real card.
-    if (kindMismatch) {
-      toast({
-        tone: 'warn',
-        title: t('ndef.kindMismatch.title'),
-        detail: t('ndef.kindMismatch.body', {
-          detected: kindLabel(kindMismatch.detected),
-          selected: kindLabel(kindMismatch.selected),
-        }),
-      });
-      return;
-    }
-
-    const kind = targetKind;
-
-    let writes: UnitWrite[];
-    let mifareKeyIds: string[] | undefined;
+    setPlanIssue(null);
+    // After writing, writeWithConfirm reads the tag again and opens it as the
+    // document when that loses nothing (unwritten binary edits stay pending).
+    setBusy(erase ? 'erase' : 'write');
     try {
-      if (isNtag(kind)) {
-        const area = buildType2UserArea(kind, message);
-        writes = userAreaToPages(area, specFor(kind).userStartUnit, wrapNdefTlv(message).length);
-      } else {
-        const image = source === 'card' && doc ? doc.image.data : null;
-        if (!image) {
-          toast({ tone: 'warn', title: t('ndef.needImage') });
-          return;
-        }
-        writes = buildMifareNdefWrites(kind, image, message);
-        mifareKeyIds = (await api.listKeys()).map((k) => k.id);
+      // D5 / FLOW-5: plan from the tag that is actually on the reader.
+      const target = await readTarget({});
+      if (!target) return;
+      const plan = planNdefWrite(target, message);
+      if (!plan.ok) {
+        // Shown in the "tag to write" card right above the buttons (stays); no toast
+        // over the buttons as well (D13).
+        setPlanIssue({ uid: target.uid, text: planErrorText(t, plan) });
+        beep('error');
+        return;
       }
-    } catch (e) {
-      toastError(e, isNtag(kind) ? t('ndef.encodeFailed') : t('ndef.mifareNotFormatted'));
-      return;
+      if (plan.writes.length === 0) {
+        toast({ tone: 'info', title: t('ndef.plan.same') });
+        return;
+      }
+      const uid = formatUid(target.uid);
+      const kind = kindLabel(target.kind);
+      const details: string[] = [];
+      if (!erase) details.push(t('ndef.confirmRecords', { n: records.length, bytes: message.length }));
+      details.push(existingLine(t, plan.existing));
+      details.push(t(specFor(target.kind).unit === 'page' ? 'ndef.confirmPages' : 'ndef.confirmBlocks', { n: plan.writes.length }));
+      const other = !!originUid && originUid.toUpperCase() !== target.uid.toUpperCase();
+      const req: WriteRequest = {
+        kind: target.kind,
+        expectedUid: target.uid,
+        writes: plan.writes,
+        allowProtected: false,
+        verify: true,
+      };
+      const res = await writeWithConfirm(req, {
+        title: erase ? t('ndef.eraseTitle') : t('ndef.confirmTitle'),
+        message: erase ? t('ndef.eraseMessage', { uid, kind }) : t('ndef.confirmMessage', { uid, kind }),
+        // E2E-UX-5: the button of the erase confirmation says "erase", not "write to tag".
+        confirmLabel: erase ? t('ndef.eraseConfirm') : undefined,
+        details,
+        dangerous: erase,
+        target: { kind: target.kind, uid: target.uid, other },
+        // NDEF records, not a copy of the open document: it is never replaced by another tag for this (R-WRITE-1).
+        docCopy: false,
+        // These are NDEF pages, not edits of the open document: nothing to keep pending.
+        keepUnitsOnFailure: [],
+        successTitle: erase ? t('ndef.erased') : t('ndef.written'),
+      });
+      const fullyOk =
+        !!res && res.failed.length === 0 && !res.aborted && res.mismatched.length === 0 && res.verified !== false;
+      // Erasing: the effect takes the now empty NDEF over unless records are being edited.
+      if (!fullyOk || erase) return;
+      const now = useAppStore.getState().doc;
+      if (!(now && now.source.type === 'card' && now.image.uid.toUpperCase() === target.uid.toUpperCase())) {
+        // The open document (another tag / a file) was kept: the records are what this tag holds now.
+        setOrigin({ type: 'written', uid: target.uid, kind: target.kind, at: Date.now() });
+      }
+      // Otherwise the refreshed document holds exactly these records: the effect takes them over.
+      setEdited(false);
+    } finally {
+      setBusy(null);
     }
-
-    const req: WriteRequest = {
-      kind,
-      expectedUid,
-      writes,
-      allowProtected: false,
-      verify: true,
-      mifareKeyIds,
-    };
-    await writeWithConfirm(req, {
-      title: t('ndef.confirmTitle'),
-      message: t('ndef.confirmMessage'),
-      details: [t('ndef.confirmRecords', { n: records.length }), t('ndef.confirmBytes', { n: message.length })],
-    });
   }
 
-  // FeliCa Lite-S uses a different NDEF mapping (via MC); this NDEF editor targets
-  // NFC Forum Type 2 (NTAG) and MIFARE Classic. Steer FeliCa to the binary editor.
-  if (source === 'card' && doc && isFelica(doc.image.kind)) {
-    return (
-      <Page>
-        <PageHeader title={t('ndef.title')} subtitle={t('ndef.subtitle')} helpTopic="ndef" />
-        <Callout tone="warn" title={t('ndef.felicaTitle')}>
-          {t('ndef.felicaBody')}
-        </Callout>
-      </Page>
-    );
-  }
+  // ---- render --------------------------------------------------------------
+
+  const docIsFelica = !!doc && isFelica(doc.image.kind);
+  const showPlanIssue = !!planIssue && (!card || card.uid === planIssue.uid);
+
+  const originText =
+    origin.type === 'doc'
+      ? origin.source === 'card'
+        ? t('ndef.origin.tag', { uid: formatUid(origin.uid), kind: kindLabel(origin.kind), when: whenLabel(origin.at, lang) })
+        : origin.source === 'file'
+          ? t('ndef.origin.docFile', { name: origin.name ?? '' })
+          : t('ndef.origin.docNew', { kind: kindLabel(origin.kind) })
+      : origin.type === 'file'
+        ? t('ndef.origin.file', { name: origin.name })
+        : origin.type === 'new'
+          ? t('ndef.origin.new')
+          : origin.type === 'written'
+            ? t('ndef.origin.written', { uid: formatUid(origin.uid), kind: kindLabel(origin.kind), when: whenLabel(origin.at, lang) })
+            : t('ndef.origin.none');
 
   return (
     <Page>
-      <PageHeader
-        title={t('ndef.title')}
-        subtitle={t('ndef.subtitle')}
-        helpTopic="ndef"
-        actions={
-          <Button icon={Send} onClick={sendToIssue} disabled={records.length === 0}>
-            {t('ndef.sendToIssue')}
-          </Button>
-        }
-      />
+      {/* R-UX-9: no screen-changing button at the top of the page; "use for batch
+          issuing" lives with the records it hands over (records card below). */}
+      <PageHeader title={t('ndef.title')} subtitle={t('ndef.subtitle')} helpTopic="ndef" />
 
       <Callout tone="info" icon={Nfc}>
         {t('ndef.uidNote')}
       </Callout>
 
-      <Card title={t('ndef.source')}>
+      <Card title={t('ndef.origin.title')} icon={Tag}>
         <div className="stack">
-          <Segmented<SourceKind>
-            ariaLabel={t('ndef.source')}
-            value={source}
-            onChange={setSource}
-            options={[
-              { value: 'card', label: t('ndef.source.card') },
-              { value: 'file', label: t('ndef.source.file') },
-              { value: 'new', label: t('ndef.source.new') },
+          <KeyValue
+            items={[
+              [
+                t('ndef.origin.label'),
+                <span key="o" data-testid="ndef-origin">
+                  {originText} {edited ? <Badge tone="warn">{t('ndef.origin.edited')}</Badge> : null}
+                </span>,
+              ],
+              ...(origin.type === 'doc'
+                ? ([[t('ndef.origin.contents'), stateLabel(t, origin.state, origin.count)]] as [string, string][])
+                : []),
             ]}
           />
-
-          {source === 'card' ? (
-            doc ? (
-              <div className="stack">
-                <KeyValue
-                  items={[
-                    [t('ndef.currentTag'), <span className="mono">{formatUid(doc.image.uid)}</span>],
-                    [t('tag.kind'), kindLabel(doc.image.kind)],
-                  ]}
-                />
-                <div className="row">
-                  <Button icon={Download} onClick={loadFromTag}>
-                    {t('ndef.loadFromTag')}
-                  </Button>
-                </div>
-              </div>
-            ) : (
-              <EmptyState
-                icon={Nfc}
-                title={t('ndef.noCard')}
-                action={
-                  <Button variant="primary" onClick={() => setView('home')}>
-                    {t('ndef.goRead')}
-                  </Button>
-                }
-              >
-                {t('ndef.noCardHint')}
-              </EmptyState>
-            )
-          ) : null}
-
-          {source === 'file' ? (
-            <div className="stack">
-              <div className="muted small">{t('ndef.source.fileHint')}</div>
-              <div className="row">
-                <Button icon={Upload} onClick={openFile}>
-                  {t('ndef.openFile')}
-                </Button>
-                <Button icon={Download} onClick={saveFile} disabled={records.length === 0}>
-                  {t('ndef.saveFile')}
-                </Button>
-                {fileName ? <Badge icon={FileText}>{fileName}</Badge> : null}
-              </div>
+          {origin.type === 'doc' && origin.dirty ? <div className="muted small">{t('ndef.origin.docDirty')}</div> : null}
+          {/* D9: automatic reading tries only the standard keys; "Read from tag" tries the registered ones too. */}
+          {origin.type === 'doc' && origin.state === 'unreadable' && isMifare(origin.kind) && !!doc && loadedKey === docKey(doc) && doc.standardKeysOnly ? (
+            <div className="muted small" data-testid="ndef-mifare-keys-hint">
+              {t('ndef.origin.mifareKeysHint')}
             </div>
           ) : null}
 
-          {source !== 'card' ? (
-            <Field label={t('ndef.targetKind')} hint={t('ndef.targetKindHint')}>
-              <Select<TagKind>
-                value={newKind}
-                onChange={setNewKind}
-                options={TAG_KINDS.filter((k) => !isFelica(k)).map((k) => ({ value: k, label: kindLabel(k) }))}
-              />
-            </Field>
+          {docPending && doc ? (
+            <Callout tone="info" title={t('ndef.pending.title')}>
+              <div>{t('ndef.pending.body', { what: docLabel(t, doc, lang) })}</div>
+              <div style={{ marginTop: 'var(--space-2)' }}>
+                <Button size="sm" icon={Download} onClick={() => void takeOpenDoc()} disabled={locked}>
+                  {t('ndef.pending.action')}
+                </Button>
+              </div>
+            </Callout>
           ) : null}
+
+          {docIsFelica ? (
+            <Callout tone="warn" title={t('ndef.felicaTitle')}>
+              <div>{t('ndef.felicaBody')}</div>
+              <div style={{ marginTop: 'var(--space-2)' }}>
+                <Button size="sm" icon={Binary} onClick={() => setView('hex')}>
+                  {t('ndef.openHex')}
+                </Button>
+              </div>
+            </Callout>
+          ) : null}
+
+          <div className="row">
+            <Button
+              variant={records.length === 0 ? 'primary' : 'secondary'}
+              icon={Nfc}
+              loading={busy === 'read'}
+              disabled={!!readWhy || locked}
+              onClick={() => void readFromTag()}
+              data-testid="ndef-read-tag"
+            >
+              {t('ndef.readTag')}
+            </Button>
+            {doc && supportsNdef(doc.image.kind) && !docIsOrigin && !docPending ? (
+              <Button icon={Download} disabled={locked} onClick={() => void takeOpenDoc()}>
+                {t('ndef.importDoc')}
+              </Button>
+            ) : null}
+            <Button icon={Upload} loading={busy === 'file'} disabled={locked} onClick={() => void openNdefFile()}>
+              {t('ndef.openFile')}
+            </Button>
+            <Button icon={FilePlus} disabled={locked} onClick={() => void startNew()}>
+              {t('ndef.startNew')}
+            </Button>
+          </div>
+          {readWhy ? <div className="muted small">{readWhy}</div> : null}
+          <div className="muted small">{t('ndef.origin.hint')}</div>
         </div>
       </Card>
 
-      <Card title={t('ndef.records')}>
-        <NdefRecordsEditor records={records} onChange={setRecords} capacityKind={targetKind} />
+      <Card
+        title={t('ndef.records')}
+        actions={
+          <div className="row">
+            <Badge tone="accent">{t('ndef.recordsCount', { n: records.length })}</Badge>
+            <Button size="sm" icon={Download} disabled={records.length === 0 || !!preview.error || locked} onClick={() => void saveNdefFile()}>
+              {t('ndef.saveFile')}
+            </Button>
+            <Button size="sm" icon={Send} onClick={sendToIssue} disabled={records.length === 0 || locked}>
+              {t('ndef.sendToIssue')}
+            </Button>
+          </div>
+        }
+      >
+        <div className="stack">
+          {lastSaved ? (
+            <div className="row">
+              <span className="muted small">{t('ndef.savedAs', { name: lastSaved.name })}</span>
+              <Button size="sm" variant="ghost" icon={FolderOpen} onClick={() => api.revealFile(lastSaved.token).catch(toastError)}>
+                {t('ndef.reveal')}
+              </Button>
+            </div>
+          ) : null}
+          <NdefRecordsEditor records={records} onChange={editRecords} capacityKind={capacityKind} readOnly={locked} />
+          {cardKind && supportsNdef(cardKind) ? (
+            <div className="muted small">{t('ndef.capacityFromCard', { kind: kindLabel(cardKind) })}</div>
+          ) : (
+            <Field label={t('ndef.capacityKind')} hint={t('ndef.capacityKindHint')}>
+              <Select<TagKind>
+                value={newKind}
+                onChange={setNewKind}
+                options={TAG_KINDS.filter((k) => supportsNdef(k)).map((k) => ({ value: k, label: kindLabel(k) }))}
+              />
+            </Field>
+          )}
+        </div>
       </Card>
 
       <Card title={t('ndef.preview')}>
@@ -334,23 +592,57 @@ export function NdefView() {
         </div>
       </Card>
 
-      {kindMismatch ? (
-        <Callout tone="warn" title={t('ndef.kindMismatch.title')}>
-          {t('ndef.kindMismatch.body', {
-            detected: kindLabel(kindMismatch.detected),
-            selected: kindLabel(kindMismatch.selected),
-          })}
-        </Callout>
-      ) : null}
-
-      <div className="ndef-actions">
-        <Button icon={Send} onClick={sendToIssue} disabled={records.length === 0}>
-          {t('ndef.sendToIssue')}
-        </Button>
-        <Button icon={PenLine} variant="primary" onClick={writeToTag}>
-          {t('ndef.writeToTag')}
-        </Button>
-      </div>
+      <Card title={t('ndef.target.title')} icon={PenLine}>
+        <div className="stack">
+          <div className="muted">{t('ndef.target.body')}</div>
+          {/* This card has its own "read this tag" (below, asks before replacing edited records): not a second one. */}
+          <TagOnReader compact readThis={false} />
+          {otherTag && card && originUid ? (
+            <Callout tone="info">
+              <div>{t('ndef.target.other', { a: formatUid(originUid), b: formatUid(card.uid) })}</div>
+              <div style={{ marginTop: 'var(--space-2)' }}>
+                <Button size="sm" icon={Nfc} disabled={!!readWhy || locked} onClick={() => void readFromTag()}>
+                  {t('ndef.target.readThis')}
+                </Button>
+              </div>
+            </Callout>
+          ) : null}
+          {cardIsFelica ? <Callout tone="warn">{t('ndef.target.felica')}</Callout> : null}
+          {showPlanIssue && planIssue ? (
+            <Callout tone="warn" title={t('ndef.plan.title')}>
+              {planIssue.text}
+            </Callout>
+          ) : null}
+          <LastWriteCallout />
+          <div className="ndef-actions">
+            <Button
+              icon={Eraser}
+              loading={busy === 'erase'}
+              disabled={!!eraseWhy || locked}
+              onClick={() => void writeToTag(true)}
+              data-testid="ndef-erase"
+            >
+              {t('ndef.erase')}
+            </Button>
+            <span className="grow" />
+            <Button
+              icon={PenLine}
+              variant="primary"
+              loading={busy === 'write'}
+              disabled={!!writeWhy || locked}
+              onClick={() => void writeToTag(false)}
+              data-testid="ndef-write"
+            >
+              {t('ndef.writeToTag')}
+            </Button>
+          </div>
+          {writeWhy ? (
+            <div className="muted small ndef-why" data-testid="ndef-write-why">
+              {writeWhy}
+            </div>
+          ) : null}
+        </div>
+      </Card>
     </Page>
   );
 }

@@ -7,6 +7,8 @@ import { createPortal } from 'react-dom';
 import type { LucideIcon } from 'lucide-react';
 import { AlertTriangle, CheckCircle2, CircleHelp, Info, Loader2, OctagonAlert, X } from 'lucide-react';
 import { useAppStore } from '../store/app';
+import { useViewActive } from '../lib/viewActive';
+import { useT } from '../i18n';
 
 const cx = (...c: (string | false | null | undefined)[]) => c.filter(Boolean).join(' ');
 
@@ -86,7 +88,7 @@ export interface PageHeaderProps {
 
 export function PageHeader({ title, subtitle, actions, helpTopic }: PageHeaderProps) {
   const setView = useAppStore((s) => s.setView);
-  const lang = useAppStore((s) => s.settings.language);
+  const t = useT();
   return (
     <header className="page-header">
       <div className="grow">
@@ -98,7 +100,7 @@ export function PageHeader({ title, subtitle, actions, helpTopic }: PageHeaderPr
         {helpTopic ? (
           <IconButton
             icon={CircleHelp}
-            label={lang === 'ja' ? 'この画面のヘルプ' : 'Help for this screen'}
+            label={t('app.helpForScreen')}
             onClick={() => setView('help', { helpTopic })}
           />
         ) : null}
@@ -385,30 +387,56 @@ export interface ModalProps {
   dismissible?: boolean;
 }
 
+/** Open modals, innermost last: only the top one reacts to Escape. */
+const modalStack: string[] = [];
+
 export function Modal({ open, title, icon: Icon, onClose, children, footer, size = 'md', dismissible = true }: ModalProps) {
   const ref = useRef<HTMLDivElement>(null);
   const titleId = useId();
+  const t = useT();
+  // Keep-alive (App.tsx): a modal opened inside a view that is now hidden stays
+  // open in its state but is not shown and does not handle keys until the view
+  // is on screen again.
+  const viewActive = useViewActive();
+  const shown = open && viewActive;
+  // Latest onClose without re-running the effect on every parent render (an
+  // inline onClose used to re-focus the first field after each keystroke).
+  const onCloseRef = useRef(onClose);
+  onCloseRef.current = onClose;
   useEffect(() => {
-    if (!open) return;
+    if (!shown) return;
+    modalStack.push(titleId);
     const prev = document.activeElement as HTMLElement | null;
-    const t = setTimeout(() => {
-      const el = ref.current?.querySelector<HTMLElement>('[data-autofocus], input, select, textarea, button.btn-primary, button');
-      el?.focus();
+    const timer = setTimeout(() => {
+      // In priority order. One selector list ('[data-autofocus], input, …') returns
+      // the first match in DOCUMENT order, i.e. the header's close button: the
+      // focus never reached [data-autofocus] (E2E 2026-11-12: "Cancel first" on
+      // risky confirmations, Enter on the first-run guide opened help instead).
+      const root = ref.current;
+      if (!root) return;
+      for (const sel of ['[data-autofocus]', 'input, select, textarea', 'button.btn-primary', 'button']) {
+        const el = root.querySelector<HTMLElement>(sel);
+        if (el) {
+          el.focus();
+          break;
+        }
+      }
     }, 0);
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape' && dismissible) {
-        e.stopPropagation();
-        onClose();
-      }
+      if (e.key !== 'Escape' || modalStack[modalStack.length - 1] !== titleId) return;
+      e.stopPropagation();
+      if (dismissible) onCloseRef.current();
     };
     window.addEventListener('keydown', onKey, true);
     return () => {
-      clearTimeout(t);
+      clearTimeout(timer);
       window.removeEventListener('keydown', onKey, true);
+      const i = modalStack.lastIndexOf(titleId);
+      if (i >= 0) modalStack.splice(i, 1);
       prev?.focus?.();
     };
-  }, [open, dismissible, onClose]);
-  if (!open) return null;
+  }, [shown, dismissible, titleId]);
+  if (!shown) return null;
   return createPortal(
     <div className="modal-backdrop" onMouseDown={(e) => dismissible && e.target === e.currentTarget && onClose()}>
       <div ref={ref} className={cx('modal', size === 'lg' && 'modal-lg')} role="dialog" aria-modal="true" aria-labelledby={titleId}>
@@ -417,7 +445,7 @@ export function Modal({ open, title, icon: Icon, onClose, children, footer, size
             {Icon ? <Icon size={18} aria-hidden /> : null}
             {title}
           </h2>
-          {dismissible ? <IconButton icon={X} label="Close" size="sm" onClick={onClose} /> : null}
+          {dismissible ? <IconButton icon={X} label={t('common.close')} size="sm" onClick={onClose} /> : null}
         </div>
         <div className="modal-body">{children}</div>
         {footer ? <div className="modal-footer">{footer}</div> : null}

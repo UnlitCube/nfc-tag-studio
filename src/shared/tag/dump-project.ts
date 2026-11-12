@@ -58,7 +58,7 @@ export function parseProject(bytes: Uint8Array): { image: TagImage; note: string
   try {
     doc = JSON.parse(bytesToUtf8(bytes)) as ProjectDoc;
   } catch {
-    throw new Error('ダンプファイルを JSON として読み込めません');
+    throw new Error('ダンプファイルを JSON として開けません');
   }
   if (!doc || doc.format !== FORMAT) throw new Error('NFC Tag Studio のダンプ（*.nfcdump）ではありません');
   if (!TAG_KINDS.includes(doc.kind)) throw new Error(`未知のタグ種類です: ${String(doc.kind)}`);

@@ -11,7 +11,9 @@
 //
 // Invariants honoured as "hardware": UID (NTAG pages 0-1, MIFARE block 0) is
 // never writable; there is no UID-changing command; MIFARE blocks open only when
-// the loaded key matches the sector trailer.
+// the loaded key matches the sector trailer. Like real tags, NTAG PWD / PACK read
+// back as 00 and a new AUTH0 / PROT takes effect from the next connection;
+// MIFARE trailers hide Key A (and Key B per the access bits).
 
 import type { ReaderInfo, SimulatorState } from '@shared/types';
 import type { TagKind } from '@shared/tags';
@@ -121,10 +123,19 @@ class VirtualConnection implements CardConnection {
   private readonly loadedKeys = new Map<number, Uint8Array>();
   private authedSector = -1;
   private closed = false;
+  /**
+   * NTAG AUTH0 / PROT as the tag latched them when this RF session began. A real
+   * NTAG applies a new CFG0/CFG1 only after it is activated again (measured
+   * 2026-11-12 on an NTAG213 + PaSoRi: protection takes effect after a
+   * reconnect), so a password setup written in one session does not lock its own
+   * read-back (2026-11-12 review R-WRITE-2).
+   */
+  private readonly ntagCfg: { auth0: number; readProtected: boolean } | null;
 
   constructor(backend: SimulatorBackend, tag: VirtualTag) {
     this.backend = backend;
     this.atr = storageAtr(tag.kind);
+    this.ntagCfg = isNtag(tag.kind) ? ntagAuthConfig(tag) : null;
   }
 
   async transmit(apdu: Uint8Array): Promise<Uint8Array> {
@@ -174,8 +185,32 @@ class VirtualConnection implements CardConnection {
     return out;
   }
 
+  /**
+   * NTAG READ / FAST_READ / FF B0: like real hardware, the PWD and PACK pages
+   * always read back as 00 (NTAG21x datasheet; also tags.ts / inspect.ts), so
+   * the simulator never hides a real-hardware verify mismatch (R-WRITE-2).
+   */
+  private ntagReadPages(tag: VirtualTag, page: number, len: number): Uint8Array {
+    const out = this.readWrap(tag, page * 4, len);
+    const p = ntagPages(tag.kind);
+    const pages = tag.image.length / 4;
+    for (let i = 0; i < len; i++) {
+      const pg = Math.floor((page * 4 + i) / 4) % pages;
+      if (pg === p.pwd || pg === p.pack) out[i] = 0x00;
+    }
+    return out;
+  }
+
   private readBinary(tag: VirtualTag, block: number, le: number): Uint8Array {
     const length = le === 0 ? 16 : le;
+    if (isFelica(tag.kind)) {
+      // Storage readers (Sony PaSoRi, measured 2026-11-12) map FF B0 00 <block> 10
+      // to a FeliCa Read Without Encryption of that real block number; a block the
+      // card refuses comes back as SW 91 00.
+      const blk = this.felicaBlock(tag, block);
+      if (!blk || length !== 16) return resp(EMPTY, 0x91, 0x00);
+      return resp(blk, SW_OK.sw1, SW_OK.sw2);
+    }
     if (isMifare(tag.kind)) {
       if (this.authedSector !== mifareSectorOfBlock(block)) return resp(EMPTY, SW_DENIED.sw1, SW_DENIED.sw2);
       const raw = this.readWrap(tag, block * 16, length);
@@ -186,10 +221,15 @@ class VirtualConnection implements CardConnection {
       return resp(out, SW_OK.sw1, SW_OK.sw2);
     }
     if (this.ntagReadProtected(tag, block)) return resp(EMPTY, SW_DENIED.sw1, SW_DENIED.sw2);
-    return resp(this.readWrap(tag, block * 4, length), SW_OK.sw1, SW_OK.sw2);
+    return resp(this.ntagReadPages(tag, block, length), SW_OK.sw1, SW_OK.sw2);
   }
 
   private updateBinary(tag: VirtualTag, block: number, data: Uint8Array): Uint8Array {
+    if (isFelica(tag.kind)) {
+      // FF D6 00 <block> 10 <16B> -> FeliCa Write Without Encryption (storage readers).
+      if (data.length !== 16) return resp(EMPTY, SW_WRONG_LEN.sw1, SW_WRONG_LEN.sw2);
+      return this.felicaWriteBlock(tag, block, data) ? resp(EMPTY, SW_OK.sw1, SW_OK.sw2) : resp(EMPTY, 0x91, 0x00);
+    }
     if (isMifare(tag.kind)) {
       if (block === 0) return resp(EMPTY, SW_DENIED.sw1, SW_DENIED.sw2); // manufacturer block
       if (this.authedSector !== mifareSectorOfBlock(block)) return resp(EMPTY, SW_DENIED.sw1, SW_DENIED.sw2);
@@ -224,23 +264,15 @@ class VirtualConnection implements CardConnection {
 
   // --- NTAG password protection ---------------------------------------------
 
-  private ntagAuth0(tag: VirtualTag): { auth0: number; readProtected: boolean } {
-    const p = ntagPages(tag.kind);
-    const cfg0 = tag.image.subarray(p.cfg0 * 4, p.cfg0 * 4 + 4);
-    const cfg1 = tag.image.subarray(p.cfg1 * 4, p.cfg1 * 4 + 4);
-    return { auth0: cfg0[3], readProtected: (cfg1[0] & 0x80) !== 0 };
-  }
-
   private ntagReadProtected(tag: VirtualTag, page: number): boolean {
-    if (!isNtag(tag.kind) || tag.ntagAuthed) return false;
-    const { auth0, readProtected } = this.ntagAuth0(tag);
+    if (!isNtag(tag.kind) || tag.ntagAuthed || !this.ntagCfg) return false;
+    const { auth0, readProtected } = this.ntagCfg;
     return readProtected && page >= auth0;
   }
 
   private ntagWriteProtected(tag: VirtualTag, page: number): boolean {
-    if (!isNtag(tag.kind) || tag.ntagAuthed) return false;
-    const { auth0 } = this.ntagAuth0(tag);
-    return page >= auth0;
+    if (!isNtag(tag.kind) || tag.ntagAuthed || !this.ntagCfg) return false;
+    return page >= this.ntagCfg.auth0;
   }
 
   // --- raw NFC-A framing -----------------------------------------------------
@@ -286,13 +318,13 @@ class VirtualConnection implements CardConnection {
       case NTAG_CMD.READ: {
         const page = cmd[1] ?? 0;
         if (this.ntagReadProtected(tag, page)) return nak();
-        return { status: 0, payload: this.readWrap(tag, page * 4, 16) };
+        return { status: 0, payload: this.ntagReadPages(tag, page, 16) };
       }
       case NTAG_CMD.FAST_READ: {
         const start = cmd[1] ?? 0;
         const end = cmd[2] ?? 0;
         if (this.ntagReadProtected(tag, start)) return nak();
-        return { status: 0, payload: this.readWrap(tag, start * 4, (end - start + 1) * 4) };
+        return { status: 0, payload: this.ntagReadPages(tag, start, (end - start + 1) * 4) };
       }
       case NTAG_CMD.WRITE: {
         const page = cmd[1] ?? 0;
@@ -382,17 +414,34 @@ class VirtualConnection implements CardConnection {
       const spec = specFor(tag.kind);
       const unit = (spec.blockMap ?? []).indexOf(block);
       if (unit < 0) return frame([0x09, ...tag.uid.subarray(0, 8), 0x01, 0xa8]); // not writable
-      // Enforce the MC per-block write-permission bitmap for user blocks (0x00-0x0E).
-      if (block <= 0x0e) {
-        const mcUnit = (spec.blockMap ?? []).indexOf(0x88);
-        const mc = decodeFelicaMc(tag.image.subarray(mcUnit * 16, mcUnit * 16 + 16));
-        if (!mc.writable[block]) return frame([0x09, ...tag.uid.subarray(0, 8), 0x02, 0xa8]); // read-only
-      }
-      tag.image.set(data.subarray(0, 16), unit * 16);
+      if (!this.felicaWriteBlock(tag, block, data)) return frame([0x09, ...tag.uid.subarray(0, 8), 0x02, 0xa8]); // read-only
       return frame([0x09, ...tag.uid.subarray(0, 8), 0x00, 0x00]);
     }
     return EMPTY;
   }
+
+  /** Write one FeliCa block of the grid, honouring the MC write-protect mask. false = refused. */
+  private felicaWriteBlock(tag: VirtualTag, block: number, data: Uint8Array): boolean {
+    const spec = specFor(tag.kind);
+    const unit = (spec.blockMap ?? []).indexOf(block);
+    if (unit < 0 || data.length < 16) return false;
+    // Enforce the MC per-block write-permission bitmap for user blocks (0x00-0x0E).
+    if (block <= 0x0e) {
+      const mcUnit = (spec.blockMap ?? []).indexOf(0x88);
+      const mc = decodeFelicaMc(tag.image.subarray(mcUnit * 16, mcUnit * 16 + 16));
+      if (!mc.writable[block]) return false;
+    }
+    tag.image.set(data.subarray(0, 16), unit * 16);
+    return true;
+  }
+}
+
+/** NTAG AUTH0 (CFG0 byte 3) and PROT (CFG1 bit 7) as stored in the tag's memory now. */
+function ntagAuthConfig(tag: VirtualTag): { auth0: number; readProtected: boolean } {
+  const p = ntagPages(tag.kind);
+  const cfg0 = tag.image.subarray(p.cfg0 * 4, p.cfg0 * 4 + 4);
+  const cfg1 = tag.image.subarray(p.cfg1 * 4, p.cfg1 * 4 + 4);
+  return { auth0: cfg0[3], readProtected: (cfg1[0] & 0x80) !== 0 };
 }
 
 /** Deterministic 32-byte "originality signature" (display only; not a real ECC sig). */
@@ -446,12 +495,17 @@ export class SimulatorBackend implements ReaderBackend {
   }
 
   setEnabled(enabled: boolean, kind?: TagKind): void {
+    // Turning the virtual reader off takes its tag away: say so (card-removed), or
+    // the service keeps showing the virtual tag and issue mode waits for a removal
+    // that never comes (2026-11-12 UX audit CARD-5).
+    const hadCard = !enabled && this.enabled && this.present && !!this.tag;
     this.enabled = enabled;
     if (enabled) {
       if (!this.tag || (kind && kind !== this.tag.kind)) this.tag = new VirtualTag(kind ?? this.tag?.kind ?? 'NTAG215');
     } else {
       this.present = false;
     }
+    if (hadCard) this.listener?.({ type: 'card-removed', reader: VIRTUAL_READER_NAME });
     this.emitReaders();
     if (enabled && this.present && this.tag) {
       this.listener?.({ type: 'card-inserted', reader: VIRTUAL_READER_NAME, atr: storageAtr(this.tag.kind) });

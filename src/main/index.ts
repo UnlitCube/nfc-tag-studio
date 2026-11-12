@@ -1,9 +1,10 @@
 // Main process entry. Baseline written by the integrator; owner after the
 // contract phase: agent "main-app" (may extend, must keep the security section).
 
-import { app, BrowserWindow, session, shell } from 'electron';
+import { app, BrowserWindow, dialog, session, shell } from 'electron';
 import { join } from 'node:path';
-import { startServices, stopServices } from './app';
+import { isIssuing, startServices, stopServices, uiLanguage } from './app';
+import { issuingQuitText, quitDialogAutoAnswer, unsavedQuitText, type QuitDialogText } from './services/policy';
 
 // --- packaged builds refuse remote debugging (must run before ready) ------------
 // A distributed build never exposes a debugging port. The only exception is the
@@ -23,6 +24,28 @@ if (!app.requestSingleInstanceLock()) {
 }
 
 let mainWindow: BrowserWindow | null = null;
+/** app.quit() was asked while the window was open: quit once the window has closed. */
+let quitRequested = false;
+
+/** Ask [proceed, cancel] on the window; true = proceed. Cancel is the default (Esc / Enter). */
+function confirmOnWindow(win: BrowserWindow, text: QuitDialogText): boolean {
+  const auto = quitDialogAutoAnswer(process.env, app.isPackaged);
+  if (auto) {
+    console.log(`[quit] "${text.message}" answered automatically: ${auto}`);
+    return auto === 'proceed';
+  }
+  const choice = dialog.showMessageBoxSync(win, {
+    type: 'warning',
+    title: text.title,
+    message: text.message,
+    detail: text.detail,
+    buttons: text.buttons,
+    defaultId: 1,
+    cancelId: 1,
+    noLink: true,
+  });
+  return choice === 0;
+}
 
 function createWindow(): BrowserWindow {
   const win = new BrowserWindow({
@@ -58,6 +81,32 @@ function createWindow(): BrowserWindow {
     return { action: 'deny' };
   });
 
+  // --- quit guards (audit WALK-13 / WRITE-2) ------------------------------------
+  // 1) Batch issuing is running: closing would stop it - ask first.
+  win.on('close', (e) => {
+    if (!isIssuing()) return;
+    if (confirmOnWindow(win, issuingQuitText(uiLanguage()))) {
+      quitRequested = true; // also quit on macOS once the window is gone
+      return; // stopServices() stops the run after the tag being written is finished
+    }
+    e.preventDefault();
+    quitRequested = false;
+  });
+  // 2) The renderer holds unwritten changes: its beforeunload handler cancels the
+  //    unload, Electron emits will-prevent-unload, and we ask. preventDefault()
+  //    here = ignore beforeunload and close anyway.
+  win.webContents.on('will-prevent-unload', (e) => {
+    if (confirmOnWindow(win, unsavedQuitText(uiLanguage()))) {
+      e.preventDefault();
+      return;
+    }
+    quitRequested = false; // the user chose to stay: a pending app.quit() is abandoned
+  });
+  win.on('closed', () => {
+    if (mainWindow === win) mainWindow = null;
+    if (quitRequested) app.quit();
+  });
+
   win.once('ready-to-show', () => win.show());
 
   if (!app.isPackaged && process.env.ELECTRON_RENDERER_URL) {
@@ -91,9 +140,18 @@ app.whenReady().then(async () => {
 
 let quitting = false;
 app.on('before-quit', (e) => {
-  if (quitting) return;
-  quitting = true;
+  // Always prevent: we exit ourselves with app.exit() once the services stopped.
   e.preventDefault();
+  if (quitting) return;
+  const win = mainWindow;
+  if (win && !win.isDestroyed()) {
+    // Close the window first (menu "Quit", Ctrl+Q, OS shutdown ...) so the quit
+    // guards above run. When it actually closes, 'closed' calls app.quit() again.
+    quitRequested = true;
+    win.close();
+    return;
+  }
+  quitting = true;
   stopServices()
     .catch((err) => console.error('[quit] stopServices failed', err))
     .finally(() => app.exit(0));

@@ -205,3 +205,8 @@
 .ndef-actions .grow {
   flex: 1 1 auto;
 }
+
+/* Why the write / erase buttons are disabled (shown under them, right-aligned). */
+.ndef-why {
+  text-align: right;
+}

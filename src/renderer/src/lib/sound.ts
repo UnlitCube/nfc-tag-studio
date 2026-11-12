@@ -19,8 +19,13 @@ function tone(freq: number, startMs: number, durMs: number, type: OscillatorType
   osc.stop(t0 + durMs / 1000 + 0.02);
 }
 
-/** Play a feedback sound if enabled in settings. */
-export function beep(kind: 'success' | 'error' | 'tap'): void {
+/**
+ * Play a feedback sound if enabled in settings.
+ *  - success: two rising tones      - error: one low buzz
+ *  - skip:    two equal mid tones (batch issue skipped a tag: neither success nor failure)
+ *  - tap:     one short click (a tag was read)
+ */
+export function beep(kind: 'success' | 'error' | 'tap' | 'skip'): void {
   if (!useAppStore.getState().settings.sound) return;
   try {
     if (kind === 'success') {
@@ -28,6 +33,9 @@ export function beep(kind: 'success' | 'error' | 'tap'): void {
       tone(1760, 110, 140);
     } else if (kind === 'error') {
       tone(220, 0, 380, 'square', 0.08);
+    } else if (kind === 'skip') {
+      tone(660, 0, 110, 'triangle', 0.1);
+      tone(660, 170, 110, 'triangle', 0.1);
     } else {
       tone(1000, 0, 60);
     }

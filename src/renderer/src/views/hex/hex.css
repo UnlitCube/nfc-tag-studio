@@ -1,10 +1,163 @@
 /* Binary (hex) editor styles. Owner: agent renderer-hex.
    Colours and sizes come only from tokens (styles/tokens.css) - no raw hex. */
 
+/* ---------- page skeleton: compact top, grid, run bar fixed at the bottom ---------- */
+/* The run bar is position: sticky inside the page's scroll container, so the page
+   itself must not add bottom padding below it (2026-11-12 WALK-9 / WALK-15). */
+.page.hx-page {
+  padding-bottom: 0;
+}
+.page.hx-page > .page-inner {
+  gap: var(--space-3);
+}
+.hx-top {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+/* document bar: where the document came from + document actions */
+.hx-docbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2) var(--space-3);
+  padding: var(--space-2) var(--space-3);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+}
+.hx-docbar-src {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-1) var(--space-3);
+  min-width: 0;
+}
+.hx-docbar-name {
+  font-weight: 650;
+  color: var(--text);
+}
+.hx-docbar-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-1) var(--space-2);
+}
+.hx-pwrow {
+  display: flex;
+  align-items: flex-end;
+  gap: var(--space-3);
+}
+.hx-pw {
+  width: 22ch;
+}
+.hx-inline-callout {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2) var(--space-3);
+}
+.hx-uidline {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  color: var(--text-dim);
+}
+.hx-legend .hx-uidline {
+  flex-basis: 100%;
+}
+
+/* entry screen */
+.hx-entry {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: var(--space-4);
+  margin-top: var(--space-3);
+  text-align: left;
+}
+.hx-entry-col {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  min-width: 0;
+}
+
+/* run bar (bottom): tag on the reader, why the write cannot be pressed, the write */
+.hx-run {
+  position: sticky;
+  bottom: 0;
+  z-index: 5;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  padding: var(--space-2) 0 var(--space-3);
+  background: var(--bg);
+  border-top: 1px solid var(--border-strong);
+}
+.hx-run-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2) var(--space-4);
+}
+.hx-run-state {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-1) var(--space-2);
+  flex: 1 1 320px;
+  min-width: 0;
+}
+.hx-run-main {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  flex: 0 0 auto;
+  margin-left: auto;
+}
+.hx-run-text {
+  font-size: var(--fs-base);
+  line-height: 1.45;
+}
+.hx-run-text.tone-ok,
+.hx-run-text.tone-muted {
+  color: var(--text-dim);
+}
+.hx-run-text.tone-info {
+  color: var(--accent-text);
+  font-weight: 600;
+}
+.hx-run-text.tone-warn {
+  color: var(--text);
+  background: var(--warn-soft);
+  border-radius: var(--radius-sm);
+  padding: 2px var(--space-2);
+}
+.hx-run-notes {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  font-size: var(--fs-small);
+  color: var(--text);
+}
+.hx-run-notes li {
+  border-left: 3px solid var(--warn);
+  padding: 2px var(--space-2);
+  background: var(--warn-soft);
+  border-radius: var(--radius-sm);
+}
+
 .hx-editor {
   display: flex;
   flex-direction: column;
-  gap: var(--space-3);
+  gap: var(--space-2);
 }
 
 /* ---------- region legend ---------- */
@@ -51,20 +204,35 @@
 .hx-swatch.region-trailer {
   background: var(--region-trailer);
 }
+.hx-swatch.region-reg {
+  background: var(--region-cc);
+}
+.hx-swatch.region-mc {
+  background: var(--region-config);
+}
 .hx-danger {
   color: var(--danger);
 }
 
 /* ---------- grid ---------- */
+/* The grid is the main content: as tall as the window allows while the top bar
+   and the run bar stay on screen (1000x680 still shows ~9 rows). position:
+   relative makes it the offsetParent of its rows (cursor follow scrolls only it). */
 .hx-grid {
+  position: relative;
   overflow: auto;
-  max-height: 64vh;
+  min-height: 160px;
+  max-height: max(240px, calc(100vh - 400px));
   border: 1px solid var(--border);
   border-radius: var(--radius);
   background: var(--surface);
   font-family: var(--font-mono);
   font-size: var(--fs-md);
   line-height: 1.6;
+}
+.hx-grid-busy {
+  cursor: progress;
+  opacity: 0.75;
 }
 .hx-row {
   display: flex;
@@ -77,7 +245,8 @@
 .hx-addr {
   flex: 0 0 auto;
   width: 7ch;
-  padding: 6px var(--space-2);
+  white-space: nowrap;
+  padding: 4px var(--space-2);
   color: var(--text-dim);
   background: var(--surface-inset);
   border-right: 1px solid var(--border);
@@ -89,9 +258,20 @@
   left: 0;
   z-index: 1;
 }
+/* "12–15" (rows spanning pages) and FeliCa block names (S_PAD12) need more room:
+   the name must not run into the first byte (WALK-18). */
+.hx-addr.hx-addr-wide {
+  width: 10ch;
+}
+.hx-addr.hx-addr-name {
+  width: 11ch;
+}
 .hx-lock {
   color: var(--text-faint);
   display: inline-flex;
+}
+.hx-lock-locked {
+  color: var(--warn);
 }
 .hx-lock-forbidden {
   color: var(--danger);
@@ -116,16 +296,29 @@
 .hx-cell {
   width: 3ch;
   text-align: center;
-  padding: 6px 1px;
+  padding: 4px 1px;
   cursor: text;
   color: var(--text);
 }
 .hx-achar {
   width: 1.5ch;
   text-align: center;
-  padding: 6px 0;
+  padding: 4px 0;
   cursor: text;
   color: var(--text-dim);
+}
+/* read-only cells: UID, locked on the tag, protected while protected edits are off */
+.hx-cell.ro {
+  cursor: not-allowed;
+}
+.hx-cell.locked:not(.sel):not(.cursor) {
+  background: var(--surface-inset);
+  color: var(--text-dim);
+}
+/* first hex digit typed, waiting for the second (one undo step per byte) */
+.hx-cell.pending {
+  color: var(--accent-text);
+  font-weight: 700;
 }
 /* a page/block boundary inside a row: thin divider + a little breathing room */
 .hx-cell.hx-unitstart,
@@ -208,17 +401,21 @@
   border: 1px solid var(--accent);
   background: var(--accent-soft);
   border-radius: var(--radius);
-  padding: var(--space-3);
+  padding: var(--space-2) var(--space-3);
   display: flex;
   flex-direction: column;
   gap: var(--space-2);
 }
 .hx-inc-head {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   gap: var(--space-2);
   color: var(--accent-text);
   font-weight: 600;
+}
+.hx-inc-head .muted {
+  font-weight: 400;
 }
 .hx-inc-row {
   display: flex;
@@ -246,6 +443,12 @@
   flex-direction: column;
   gap: 2px;
 }
+/* in the one-line editing toolbar the label sits left of its control */
+.hx-toolbar .hx-inline-label {
+  flex-direction: row;
+  align-items: center;
+  gap: var(--space-2);
+}
 
 /* ---------- toolbars ---------- */
 .hx-toolbar {
@@ -260,10 +463,20 @@
 .hx-status {
   display: flex;
   flex-wrap: wrap;
-  gap: var(--space-2) var(--space-4);
+  gap: var(--space-1) var(--space-4);
   align-items: center;
+  min-height: 1.5em;
   font-size: var(--fs-small);
   color: var(--text-dim);
+}
+.hx-ro-reason {
+  color: var(--text-dim);
+}
+.hx-ro-notice {
+  color: var(--text);
+  background: var(--warn-soft);
+  border-radius: var(--radius-sm);
+  padding: 0 var(--space-2);
 }
 .hx-panelgrid {
   display: grid;
@@ -446,6 +659,15 @@
 .hx-achar.region-password:not(.changed):not(.sel):not(.cursor) {
   background: var(--region-password);
 }
+/* FeliCa Lite-S: REG and MC */
+.hx-cell.region-reg:not(.changed):not(.sel):not(.cursor),
+.hx-achar.region-reg:not(.changed):not(.sel):not(.cursor) {
+  background: var(--region-cc);
+}
+.hx-cell.region-mc:not(.changed):not(.sel):not(.cursor),
+.hx-achar.region-mc:not(.changed):not(.sel):not(.cursor) {
+  background: var(--region-config);
+}
 /* MIFARE sector trailers (region 'data' but flagged via protected) */
 .hx-cell.protected.region-data:not(.changed):not(.sel):not(.cursor),
 .hx-achar.protected.region-data:not(.changed):not(.sel):not(.cursor) {
@@ -490,8 +712,52 @@
   gap: var(--space-2);
   flex: 0 0 auto;
 }
+.flags-num {
+  width: 7ch;
+}
 .flags-felica-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
   gap: 6px var(--space-3);
+}
+/* Deciding the NTAG password when protection is turned on (R-UX-5). */
+.flags-pw {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  padding: var(--space-3);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+}
+.flags-pw-fields {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2) var(--space-3);
+}
+.flags-pw-fields .field {
+  width: 20ch;
+}
+.flags-danger-text {
+  color: var(--danger);
+  margin: 0;
+}
+
+/* NTAG password field + what happens with it (R-UX-1 / R-UX-12). */
+.hx-pwbox {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: var(--space-1) var(--space-3);
+  min-width: 0;
+}
+.hx-pw-note {
+  margin: 0 0 6px;
+  max-width: 64ch;
+  line-height: 1.45;
+}
+.hx-pw-note.is-warn {
+  color: var(--text);
+  background: var(--warn-soft);
+  border-radius: var(--radius-sm);
+  padding: 2px var(--space-2);
 }

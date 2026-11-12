@@ -11,7 +11,7 @@
 // The pcsclite / PCSC.framework paths use the same call shapes with the ANSI
 // ("A") entry points and are best-effort (mac / Linux are secondary).
 
-import koffi from 'koffi';
+import type KoffiModule from 'koffi';
 import {
   SCARD_SCOPE_SYSTEM,
   SCARD_SHARE_SHARED,
@@ -63,11 +63,23 @@ function libraryName(): string {
 }
 
 /**
- * Load the native library and bind the PC/SC functions. Throws when the library
+ * koffi is loaded on first use, not at module load: the app (and the E2E run
+ * with PC/SC disabled) still starts when the native addon is missing or broken
+ * - that only shows up as "PC/SC unavailable" (npm 11 skips koffi's install
+ * script; see CLAUDE.md).
+ */
+async function loadKoffi(): Promise<typeof KoffiModule> {
+  const mod = (await import('koffi')) as unknown as { default?: typeof KoffiModule } & typeof KoffiModule;
+  return mod.default ?? mod;
+}
+
+/**
+ * Load the native library and bind the PC/SC functions. Rejects when the library
  * is missing or cannot be loaded; the caller treats that as "service
  * unavailable" and retries.
  */
-export function loadWinscard(): Winscard {
+export async function loadWinscard(): Promise<Winscard> {
+  const koffi = await loadKoffi();
   const win = process.platform === 'win32';
   const lib = koffi.load(libraryName());
 
