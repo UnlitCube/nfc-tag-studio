@@ -69,7 +69,8 @@
 
 ## 単体テストの罠（この PC では vitest が動かない。2026-11-12 再確認）
 
-- **vitest はこの環境で起動できない**。`describe()` の行で必ず `TypeError: Cannot read properties of undefined (reading 'config')`（ワーカーの runner が初期化される前にテストモジュールが評価される）。**src を一切 import しないトリビアルテスト（`describe('x',()=>it('y',()=>expect(1+1).toBe(2)))`）でも 100% 再現**。並列レースではない（単一ファイル・`--pool=forks`・`--no-isolate` でも同じ）。**vitest 5.1.0 と 4.1.12 の両方で再現**。`obug` 等の依存はレジストリと一致（改ざんではない）。おそらく vite 8 系とワーカーの非互換。`@vitejs/plugin-react@6`・`electron-vite@6` が vite ^8 を要求するため vite を下げられないのが根。
-- **2026-11-12 の前半で「真因は lockfile 不整合、整合させたら 401 件 green」と結論したのは誤り**だった（その後トリビアルテストでも落ちることを確認）。版をいじっても直らない。ここは触らない（`package.json` の vitest/vite を書き換えても解決しない）。
-- **検証の代替手段**（vitest が直るまで）: ①`npm run typecheck`（動く）、②純粋ロジックは `tsc --rootDir src/shared --outDir <tmp> --module commonjs ...` で CJS に出して `node` で直接アサーション（FeliCa MC・NTAG ロックの検証はこれで実施済み）、③Electron アプリ + 仮想リーダーで実機能確認。
+- **vitest はこの環境で起動できない**。`describe()` の行で必ず `TypeError: Cannot read properties of undefined (reading 'config')`。真因は vitest 内部チャンクの `initSuite`（`runner.config` 参照）で、モジュール変数 `runner` が未設定（`clearCollectorContext(file, currentRunner)` が設定するはずが呼ばれていない／テスト側が別インスタンスの vitest を読んでいる＝モジュール二重化）。**src を一切 import しないトリビアルテストでも 100% 再現**。並列レースではない（単一ファイル・`--pool=forks`・`--no-isolate` でも同じ）。
+- **やったが効かなかったこと（2026-11-12、再調査済み。繰り返さない）**: vitest 版変更（**4.1.12 / 5.0.5 / 5.1.0 すべて fail**）、`rm -rf node_modules && npm install` のクリーン再インストール、pool/isolate 切替、出力のファイル取り。`obug` 等の依存はレジストリと一致（改ざんではない）。vitest 5 の peer は `vite ^6.4||^7||^8`・node は `>=24` 対応＝公式には非対応ではない。**おそらく vite 8 + ワーカー + node24 + Windows の組み合わせ固有**。`@vitejs/plugin-react@6`・`electron-vite@6` が vite ^8 を要求するので vite を下げられず、**アプリの構成を変えない限り vitest は直せない**（別タスク。候補: 上流修正待ち／テスト用に vite を分離／WSL で純粋ロジックだけ回す）。
+- **2026-11-12 前半の「lockfile 不整合が真因、整合で 401 件 green」は誤診だった**（後でトリビアルでも落ちると確認）。版・lock をいじっても直らない。
+- **検証の代替手段**（vitest が直るまで）: ①`npm run typecheck`（動く）、②**`npm run test:smoke`**（`scripts/smoke-logic.cjs`＝`tsc` で `src/shared` を CJS 出力し `node` で中核ロジックをアサート。FeliCa MC・NTAG ロック等 31 件。vitest の代替ではなく回帰ガード）、③Electron アプリ + 仮想リーダーで実機能確認。
 - **リーダーが PnP「Unknown」で PC/SC に出ない**ことがある（スリープ/再開後など）。PaSoRi を USB で抜き差しすると復帰。

@@ -19,6 +19,7 @@
     "typecheck:web": "tsc -p tsconfig.json --noEmit",
     "typecheck": "npm run typecheck:node && npm run typecheck:web",
     "unit": "vitest run",
+    "test:smoke": "node scripts/smoke-logic.cjs",
     "unit:watch": "vitest",
     "e2e": "npm run build && playwright test",
     "test": "npm run typecheck && npm run unit",
