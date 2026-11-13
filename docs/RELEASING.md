@@ -26,7 +26,7 @@
 6. **タグを push する**: `git tag v<X.Y.Z>` → `git push origin v<X.Y.Z>`。`release.yml` が Release（0.x はプレリリース）を作り、`SHA256SUMS.txt` を添えます。公開済みなら Pages も作り直します。
 7. **確かめる**: Release の添付が 3 つ（portable の exe・zip・SHA256SUMS.txt）あること、本文が CHANGELOG の節であること。
 
-課金の見込み（リポジトリが Private の間）: `ci.yml` は 1 回 約 4〜6 分（Linux）、`release.yml` は Linux 約 6 分 + Windows 約 15 分（Windows は 2 倍で数える）。どちらも未計測で、初回の実行で直します。
+実行の時間（2026-11-13 の実測）: `ci.yml` は約 1 分（Linux）。`release.yml` は gate 約 1 分 + Windows 約 7 分（E2E・パッケージ・起動の確認）+ release 約 0.5 分。Private の間は Windows を 2 倍で数えるので、1 回 約 16 分ぶん。Public では標準のランナーは無料。
 
 ## 初めて公開するとき（1 回だけ）
 

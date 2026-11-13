@@ -10,7 +10,7 @@
 # - 安い検査（版・CHANGELOG・型・単体・通知）を Linux で先に済ませてから、Windows のビルドに入る。
 # - 0.x の間はプレリリースとして出す（README と CHANGELOG の位置付けと同じ）。
 # - 署名はしていない（SmartScreen の警告が出る。README の「既知の制限」）。
-# - 1 回の課金の見込み: Linux 約 6 分 + Windows 約 15 分（×2 倍）。未計測。初回の実行で直す。
+# - 実行の時間（2026-11-13 の実測）: gate 約 1 分 + Windows 約 7 分 + release 約 0.5 分。
 
 name: release
 
