@@ -1,0 +1,159 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>NFC Tag Studio</title>
+  <meta name="description" content="自組織で管理する NFC タグ（NTAG・MIFARE Classic・FeliCa Lite-S）を、読み取り・編集・バックアップ・一括発行する Windows のデスクトップアプリ。無料・MIT ライセンス。">
+  <meta property="og:type" content="website">
+  <meta property="og:title" content="NFC Tag Studio">
+  <meta property="og:description" content="自組織の NFC タグを、読み取り・編集・一括発行する Windows アプリ。無料・オープンソース。">
+  <meta property="og:image" content="https://unlitcube.github.io/nfc-tag-studio/images/ja/home.png">
+  <link rel="icon" href="assets/icon.svg" type="image/svg+xml">
+  <link rel="alternate" hreflang="en" href="en/">
+  <link rel="stylesheet" href="assets/site.css">
+</head>
+<body>
+  <header class="site-header">
+    <div class="wrap">
+      <a class="brand" href="./"><img src="assets/icon.svg" alt="" width="32" height="32">NFC Tag Studio</a>
+      <nav class="site-nav" aria-label="ページ内の案内">
+        <a href="#features">できること</a>
+        <a href="#readers">対応リーダーとタグ</a>
+        <a href="#safety">安全の約束</a>
+        <a href="https://github.com/UnlitCube/nfc-tag-studio/wiki">使い方（Wiki）</a>
+        <a href="en/" lang="en" hreflang="en">English</a>
+      </nav>
+    </div>
+  </header>
+
+  <main>
+    <section class="hero">
+      <div class="wrap">
+        <div>
+          <span class="eyebrow">無料・オープンソース（MIT）</span>
+          <h1><span class="nb">自組織の NFC タグを、</span><span class="nb">迷わず発行・編集する。</span></h1>
+          <p class="lead">NTAG213/215/216・MIFARE Classic・FeliCa Lite-S を、読み取り・編集・書き込み・バックアップ・一括発行する Windows のデスクトップアプリです。社員証や会員証への ID の採番、URL や Wi-Fi の書き込みに使えます。</p>
+          <div class="actions">
+            <a class="btn btn-primary" href="https://github.com/UnlitCube/nfc-tag-studio/releases">ダウンロード</a>
+            <a class="btn" href="https://github.com/UnlitCube/nfc-tag-studio/wiki">使い方を読む</a>
+          </div>
+          <p class="meta">v{{VERSION}}（ベータ版）・Windows 10 / 11（x64）・インストール不要の exe と zip</p>
+        </div>
+        <div class="window" aria-hidden="true">
+          <div class="window-bar"><span></span><span></span><span></span></div>
+          <img src="images/ja/home.png" alt="" width="1920" height="1200">
+        </div>
+      </div>
+    </section>
+
+    <section id="features">
+      <div class="wrap">
+        <h2>できること</h2>
+        <p class="sub">タグを置くと自動で読み取り、どの画面でも「リーダーの上のタグ」の状態が同じ表示で出ます。書き込む前には、書き込み先のタグ（種類と UID）を確かめます。</p>
+        <div class="features">
+          <article class="card">
+            <img src="images/ja/ndef.png" alt="NDEF 編集の画面。URL とテキストの 2 件のレコードと、容量のメーター" width="1920" height="1200" loading="lazy">
+            <div class="body"><h3>NDEF 編集</h3><p>URL・テキスト・Wi-Fi・連絡先・アプリの起動など、スマートフォンで読める内容を作って書き込みます。</p></div>
+          </article>
+          <article class="card">
+            <img src="images/ja/hex.png" alt="バイナリ編集の画面。ページごとの 16 進の表と、領域の色分け" width="1920" height="1200" loading="lazy">
+            <div class="body"><h3>バイナリ編集</h3><p>メモリを 1 バイトずつ編集します。領域の色分け、ビットの意味の解説、連番の増減、設定の解説つき編集。</p></div>
+          </article>
+          <article class="card">
+            <img src="images/ja/issue.png" alt="一括発行の画面" width="1920" height="1200" loading="lazy">
+            <div class="body"><h3>一括発行</h3><p>連番・CSV・NDEF を、タグを置き替えながら 1 枚ずつ書き込みます。発行済みのスキップ、照合、止めた所から再開、発行台帳。</p></div>
+          </article>
+          <article class="card">
+            <img src="images/ja/backup.png" alt="バックアップ・複製の画面" width="1920" height="1200" loading="lazy">
+            <div class="body"><h3>バックアップ・複製</h3><p>タグの内容を .nfcdump・.bin・Flipper の .nfc に保存し、同じタグや別のタグに書き戻します（UID は複製されません）。</p></div>
+          </article>
+          <article class="card">
+            <img src="images/ja/schema.png" alt="データスキーマの画面" width="1920" height="1200" loading="lazy">
+            <div class="body"><h3>データスキーマ</h3><p>社員 ID などを、どの位置にどの形式で書くかを画面で組み立て、ファイルに保存して一括発行で使います。</p></div>
+          </article>
+          <article class="card">
+            <img src="images/ja/keys.png" alt="MIFARE 鍵の画面" width="1920" height="1200" loading="lazy">
+            <div class="body"><h3>MIFARE 鍵の管理</h3><p>運用している鍵を登録します。伏字で表示し、Windows の資格情報の保護（DPAPI）で暗号化して保存します。</p></div>
+          </article>
+        </div>
+      </div>
+    </section>
+
+    <section id="readers">
+      <div class="wrap">
+        <h2>対応リーダーとタグ</h2>
+        <p class="sub">PC/SC（Windows の「Smart Card」サービス）で NFC リーダーと通信します。リーダーが無くても、仮想リーダーで一通り試せます。</p>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr><th scope="col">リーダー</th><th scope="col">NTAG213/215/216</th><th scope="col">FeliCa Lite-S</th><th scope="col">MIFARE Classic</th><th scope="col">確かめ方</th></tr>
+            </thead>
+            <tbody>
+              <tr><td>Sony PaSoRi（RC-S380）</td><td>読み書き（パスワード認証・カウンタは不可）</td><td>読み書き</td><td>まだ確かめていません</td><td><span class="tag-ok">実物で確認</span></td></tr>
+              <tr><td>ACR122U など</td><td>読み書き・パスワード認証・カウンタ</td><td>読み書き</td><td>運用者の鍵で読み書き</td><td><span class="tag-sim">仮想リーダーで確認</span></td></tr>
+              <tr><td>仮想リーダー（アプリに内蔵）</td><td>すべて</td><td>すべて</td><td>すべて</td><td>—</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <p class="meta">詳しくは Wiki の <a href="https://github.com/UnlitCube/nfc-tag-studio/wiki/対応リーダーとタグ">対応リーダーとタグ</a> を見てください。</p>
+      </div>
+    </section>
+
+    <section id="safety">
+      <div class="wrap">
+        <h2>安全の約束</h2>
+        <p class="sub">管理・運用する権限を持っているタグのための道具です。他人のカードの複製や、認証の回避には使えない作りにしています。</p>
+        <ul class="promises">
+          <li><strong>UID は書き換えない</strong><span>UID（製造番号）は読み取り専用です。UID を書き換える特殊なタグ（magic card）向けの機能はありません。</span></li>
+          <li><strong>鍵を解析しない</strong><span>MIFARE Classic は、運用者が登録した鍵でだけ開きます。総当たりや解析はしません。</span></li>
+          <li><strong>秘密を残さない</strong><span>鍵とパスワードは、ログ・発行台帳・バックアップのファイルに残しません。</span></li>
+          <li><strong>取り消せない操作は確かめてから</strong><span>ロックやパスワードの設定は、上級者モードと確認を経てからでないと実行できません。</span></li>
+          <li><strong>NFC でない機器には送らない</strong><span>USB セキュリティトークンなど、NFC リーダーでない PC/SC 機器にはコマンドを送りません。</span></li>
+          <li><strong>書いたら確かめる</strong><span>書き込みの後に読み戻して照合し、書けなかったページ・ブロックと次にすることを示します。</span></li>
+        </ul>
+      </div>
+    </section>
+
+    <section id="start">
+      <div class="wrap">
+        <h2>はじめかた</h2>
+        <ol class="steps">
+          <li><strong>ダウンロードして起動</strong><span>Releases から portable の exe か zip を取り、そのまま起動します（インストールは不要）。</span></li>
+          <li><strong>リーダーを USB に接続</strong><span>Sony PaSoRi なら「NFC ポートソフトウェア」を入れておきます。リーダーが無ければ、仮想リーダーで試せます。</span></li>
+          <li><strong>タグを置く</strong><span>置いたままにすると自動で読み取ります。NDEF 編集かバイナリ編集で内容を変え、［タグに書き込む］で書き込みます。</span></li>
+        </ol>
+        <p class="meta">コード署名をしていないため、初めて起動するときに Windows の SmartScreen の確認が出ます。手順は Wiki の <a href="https://github.com/UnlitCube/nfc-tag-studio/wiki/インストール">インストール</a> にあります。</p>
+      </div>
+    </section>
+
+    <section id="limits">
+      <div class="wrap">
+        <h2>いまの制限</h2>
+        <ul class="notes">
+          <li>Windows（x64）専用です。macOS・Linux 向けの配布物はありません。</li>
+          <li>Sony PaSoRi などストレージ方式のリーダーでは、NTAG のパスワード認証・NFC カウンタ・署名の読み取りは使えません。</li>
+          <li>ACR122U などのリーダーと MIFARE Classic は、仮想リーダーでだけ確かめています。</li>
+          <li>FeliCa は Lite-S だけに対応しています。交通系 IC などには対応していません。</li>
+        </ul>
+        <p class="meta">変更の記録は <a href="https://github.com/UnlitCube/nfc-tag-studio/blob/master/CHANGELOG.md">CHANGELOG</a> にあります。</p>
+      </div>
+    </section>
+  </main>
+
+  <footer class="site-footer">
+    <div class="wrap">
+      <div class="links">
+        <a href="https://github.com/UnlitCube/nfc-tag-studio">GitHub</a>
+        <a href="https://github.com/UnlitCube/nfc-tag-studio/releases">Releases</a>
+        <a href="https://github.com/UnlitCube/nfc-tag-studio/wiki">Wiki</a>
+        <a href="https://github.com/UnlitCube/nfc-tag-studio/issues">不具合の報告・要望</a>
+        <a href="https://github.com/UnlitCube/nfc-tag-studio/security/policy">脆弱性の報告</a>
+        <a href="en/" lang="en" hreflang="en">English</a>
+      </div>
+      <p>© 2026 UnlitCube. MIT License.</p>
+      <p>NFC Tag Studio は NXP Semiconductors・ソニー・Advanced Card Systems・NFC Forum の製品ではなく、各社から提携・承認を受けたものではありません。MIFARE・NTAG は NXP B.V.、FeliCa・PaSoRi はソニーグループ株式会社の商標です。その他の名称は各社の商標または登録商標です。</p>
+    </div>
+  </footer>
+</body>
+</html>

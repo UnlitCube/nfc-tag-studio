@@ -23,7 +23,15 @@
 | 起動スモーク（スクショ） | `npm run build && node scripts/smoke-launch.cjs <png>` |
 | E2E | `npm run e2e`（Playwright、`out/` を読む） |
 | 実機での書き込みの確認（捨ててよいタグだけ） | `NFCTS_HW_WRITE_UID=<そのタグの UID>` を付けて `npm run hw:write`（`tests/hw`。UID が違えば何も書かずに止まる。書くのはユーザー領域だけで、最後に元へ戻す） |
-| 配布物 | `npm run dist:win` |
+| 配布物 | `npm run dist:win`（build → `notices:check` → portable の exe と zip。出力先は `release/`。作る前に `npm ci` で lock とそろえる＝下の罠） |
+| パッケージ版の起動の確認 | `npm run smoke:packaged`（`release/win-unpacked` を起動。画面・橋・PC/SC（koffi）の読み込みを見る。`unavailable` は失敗） |
+| 第三者のライセンスの通知 | `npm run build && npm run notices`（作る）／`npm run notices:check`（CI。古い・許可の外のライセンスで落ちる） |
+| リリースノート（CHANGELOG の版の節） | `npm run release:notes`（`node tools/changelog-section.mjs --release --check` がリリースの検査） |
+| 文書の検査 | `npm run docs:check`（README・docs・wiki・.github のリンク、個人の環境の値） |
+| Pages のサイト | `npm run site:build`（`site/` + `docs/images` → `site-dist/`） |
+| README・Wiki・Pages の画面のキャプチャ | `npm run shots`（仮想リーダーだけ。`docs/images/<ja|en>/`） |
+
+公開とリリースの手順は `docs/RELEASING.md`。CI は `.github/workflows/`（ci = 毎 push の軽い検査・Linux、release = タグで Windows の E2E とパッケージ、pages・wiki = Public になってから動く）。Wiki の正はリポジトリの `wiki/`。
 
 ## 罠（経験済み・繰り返さない）
 
@@ -32,8 +40,18 @@
 - **`ELECTRON_RUN_AS_NODE`** があると Electron が素の Node で起動する。起動スクリプト・spawn・E2E で必ず消す。
 - **preload は sandbox のため CJS 必須。** `"type": "module"` を足すと preload が ESM になり橋が消える。
 - **contextBridge を越えた例外は独自フィールドが落ちる。** だからブリッジは Envelope を返し、renderer の `lib/api.ts` で `AppError` にする。
-- 開発 PC の PC/SC 機器は USB トークン（`FS USB Token 0`、ATR `3B9F9581...`）だけ。NFC リーダーと誤認しない・APDU を送らない（`isLikelyContactlessReader`）。
+- 開発 PC の PC/SC 機器は USB トークン（`FS USB Token 0`、ATR `3B9F9581...`）・Sony PaSoRi・YubiKey（2026-11-12 時点。2026-11-08 はトークンだけだった）。トークンと YubiKey を NFC リーダーと誤認しない・APDU を送らない（`isLikelyContactlessReader`）。
 - Playwright の `_electron` は `out/` を読む。E2E の前に `npm run build`。
+
+## 公開の準備（2026-11-13）で分かった罠
+
+- **Vite 8 は esbuild を同梱しない。** `minify: 'esbuild'` や `esbuild: { keepNames }` を書くとビルドが `transformWithEsbuild … requires esbuild` で止まる → `minify: 'oxc'` と `rollupOptions.output.keepNames: true`（ビルドのときだけ）→ `tests/tools-release.test.ts` の「ビルドの設定」。
+- **koffi 3.3.7 は `koffi/src/koffi/*.js` を実行時に読む。** koffi 2 向けの `!**/node_modules/koffi/src/**` を写したら、パッケージ版は画面は出るのに PC/SC だけ `Cannot find module …koffisrckoffiindex.js` で `unavailable` になった → 外すのは C/C++ のソース・ヘッダ・`lib`・`vendor`・`doc`・`.lib` だけ（`electron-builder.json`）。`smoke:packaged` は `unavailable` を失敗にし、release.yml は asar に `koffi/src/koffi/index.js` があることを見る（`src/koffi/index.js` を消すと落ちることを確認）。
+- **手元の `node_modules` が lock とずれていた**（2026-11-12 の vitest の入れ替えの試行の名残で、Electron 44.11.1・lucide-react 1.72.0・vite 8.3.8。lock は 44.10.2・1.70.0・8.3.6）。手元で作った `THIRD_PARTY_NOTICES.txt` を Linux の CI（`npm ci`）が古いと言ったので分かった → `npm ci` で lock にそろえて作り直した。通知と配布物を作る前は `npm ci`。
+- **koffi のプリビルドは OS ごとの optionalDependencies**。Windows と Linux の CI で入るものが違い、通知が食い違う → 通知の道具は配布先（win32-x64）向けだけを lock の `os`・`cpu` で選び、入っていなければ lock の版とライセンス・koffi の文を使う。
+- **Org（UnlitCube）は Free プランなので、Private の間は Pages と Wiki を使えない。** `pages.yml`・`wiki.yml` は `!github.event.repository.private` のときだけ動く。Wiki のリポジトリは、画面で最初のページを作るまで存在しない（`docs/RELEASING.md`）。
+- **WSL（Ubuntu-24.04）が `Wsl/Service/E_UNEXPECTED` で応答しないことがある**（2026-11-13）。Docker Desktop も WSL の上で動いているので `wsl --shutdown` はしない。Linux での確認は `docker run node:<.node-version>-bookworm` で、作業ツリーの写し（`git ls-files -co --exclude-standard` の tar）に CI の手順を流した。
+- 公開する文書に、実物のタグの UID・個人のパス・個人のメールアドレスを書かない（`npm run docs:check` が形で見る。値の一覧はリポジトリに置かない）。
 
 ## 実機で分かったこと（2026-11-09、Sony PaSoRi 3.0 + 本物の NTAG215）
 
@@ -41,7 +59,7 @@
 - **PaSoRi の `FF B0` は 16 バイト単位のみ**。4 バイト読み（`FF B0 00 03 04`）は `6C 10`（正しい Le は 0x10）を返す。→ `ReaderIo.readBinary` に `6C XX` 再試行（リーダー指定の Le で読み直し必要分を slice）を実装。CC 読み（識別）が 4 バイトだったため、これが無いと全カードが `UNSUPPORTED_TAG` になっていた。
 - **storage 方式では種別を CC（page 3）から判定**（GET_VERSION が使えない）。`identifyWith` は version→CC→ATR の順でフォールバック。NTAG215 の CC は `E1 10 3E 00`（size 0x3E）。
 - **仮想リーダーの自動選択**: 実機リーダーが接続されていると `activeReaderName` が実機を優先し、シミュレータのテストが実機のカードを読んで落ちる（環境依存の flake）。→ 仮想リーダーが「有効 かつ タグ在り」のとき自動選択で優先する（実機を使うときは明示選択）。これでハードの有無に関係なくテストが決定的。
-- 実測: PaSoRi 経由で本物の NTAG215 を 135 ページ全て読み取り成功（denied 0）、UID `04:15:91:DA:99:AE:20`。書き込みは実機で未実施（ユーザーの実物タグのため）。
+- 実測: PaSoRi 経由で本物の NTAG215 を 135 ページ全て読み取り成功（denied 0）。書き込みは実機で未実施（ユーザーの実物タグのため）。
 
 ## FeliCa Lite-S（2026-11-11 追加）
 
@@ -59,7 +77,7 @@
 
 ## NTAG 保護・認証の実機検証とバグ（2026-11-12、本物の NTAG213 + PaSoRi）
 
-- PaSoRi は NTAG213 も PC/SC で読み書き可（読=`FF B0`、書=`FF D6` で 1 ページ 4 バイト、`90 00`）。UID `04 B0 21 D2 D8 38 80`。NTAG のリーダー層は元々 storage 経路対応なので FeliCa と違い実装は動く（PWD_AUTH・署名・カウンタは raw 専用で PaSoRi では不可）。
+- PaSoRi は NTAG213 も PC/SC で読み書き可（読=`FF B0`、書=`FF D6` で 1 ページ 4 バイト、`90 00`）。NTAG のリーダー層は元々 storage 経路対応なので FeliCa と違い実装は動く（PWD_AUTH・署名・カウンタは raw 専用で PaSoRi では不可）。
 - **N1・N2 は 2d2155f で直した**（回帰: `npm run test:smoke` の NTAG lock state）。以下は当時の記録。
 - **バグ N1（`readNtagLockState`、`src/shared/tag/ntag.ts`）**: 動的ブロックロック判定が `page0x28 の byte3 & 0x07` を見るが、**NTAG213 の page0x28 byte3 は常に `0xBD` 固定の読み出し値**（ロックビットではない）。→ **どの NTAG213 でも `blockLocked=true` の誤判定**（`0xBD&0x07=0x05`）。実機 factory カードで確認。動的 BL ビットは byte2 側（データシート図。NXP community の `00 00 3F` が BL を有効化）。
 - **バグ N2（同ファイル）**: **NTAG213 の動的ロック粒度は 1 ビット=2 ページ**（実機で byte0 bit0 → page 0x10-0x11 の両方をロック確認）。アプリは `gran = NTAG213 ? 1 : 16`（1 ページ）としており、ロック対象ページの対応が 2 倍ずれる。実ロックビットは 12 本（byte0 全 8＋byte1 下位 4 ＝ pages 16-39 を 2 ページ単位）、残りは BL/RFUI。
@@ -106,7 +124,7 @@
 - **起動中に置く・離す・置き替える（2026-11-13、利用者が手で操作、90 秒の記録）**: NTAG215・FeliCa Lite-S・NTAG213 の 3 枚で 26 回の置く/離す。離すのは約 0.1〜0.3 秒、置いてから識別まで約 0.2 秒、自動読み取りの完了まで約 0.5 秒で表示に出た。違うタグへの置き替えは毎回正しい UID/IDm に切り替わり、文書も追従した。固まった状態・取り違えは 0 回。持ち上げかけたときの読み取りは「処理の途中でタグが離れました」で失敗として出た（正しい）。**一瞬のタッチ**は「確認中…」が約 2.3 秒（識別の再試行 300/600/1200 ms）→「読み取れません」が約 0.15 秒 →「置いてください」に戻った（終わりの状態は正しい）。
 - **一瞬のタッチ・読める範囲の端で、「確認中…」が約 2.3 秒続いてから「読み取れません」が一瞬出た** → 記録を見ると、リーダー（PaSoRi）はその間ずっと「タグあり」を返し、識別は UID（`FF CA`）は読めても CC の読み取りで失敗していた。4 回目は `SCARD_W_REMOVED_CARD`（`CARD_REMOVED`）で、「タグなし」が届いたのはその約 0.14 秒後。一瞬のタッチというより、読める範囲の端で揺れていた → 再試行中は `ReaderStatus.cardRetrying` を立て、画面は「うまく読み取れません。タグをリーダーの中央に置き、動かさないでください。」と出す。最後の失敗が `CARD_REMOVED` でリーダーがまだ「タグあり」なら、`REMOVED_GRACE_MS`（500 ms、ポーリング 300 ms より長い）待ってもう一度だけ試す（離れていれば、そのまま「置いてください」になる）→ `tests/nfc-service-readers.test.ts` の「cardRetrying」「without an "error" flash」「one more try」（直し方を外すと落ちることを確認）・`tests/shell-home.test.ts`。
 - **読み取るたびにステータスバーへ「他のアプリが使用中」が約 0.3 秒出た（嘘の警告）** → Windows は自分の接続にも `SCARD_STATE_INUSE` を立てる。読み取り中に 40 ms ごとにイベントループへ順番を譲る変更（CARD-13）で、ポーリングが自分の接続中に走るようになって表に出た → `pcsc/pure.ts` の `effectiveInUse`: 自分の接続中と閉じてから 1 秒は無視し、自分のでない INUSE も 2 回続けて見えたときだけ出す → `tests/pcsc-backend.test.ts`「INUSE caused by our own connection」・`tests/pcsc.test.ts`（規則を外すと落ちることを確認）。直した後、実機で 4 回読み取って一度も出ないことを確かめた。
-- **実機への書き込み（2026-11-13、捨ててよい NTAG213・UID 04:DA:21:D2:D8:38:80）**: `npm run hw:write` で、画面の操作どおりに、バイナリ編集で 2 バイト変えて書く・NDEF に URL を書く（ホームで 1 件と出る）・バックアップを保存してから、読み取った文書からとファイルから「このタグに戻す」・NDEF の消去、を通した。どれも読み取り直して照合 OK。確認ダイアログの書き込み先の UID も正しかった。確認で押してから結果が出るまで 0.46〜0.57 秒。最後にユーザー領域を元に戻し、全 45 ページが書く前と一致した。2 回流して 2 回とも通った。ロック・CFG・パスワードは書いていない（不可逆、または PaSoRi ではパスワード認証ができず戻せないため）。
+- **実機への書き込み（2026-11-13、捨ててよい NTAG213。UID は公開しない＝手元の記録）**: `npm run hw:write` で、画面の操作どおりに、バイナリ編集で 2 バイト変えて書く・NDEF に URL を書く（ホームで 1 件と出る）・バックアップを保存してから、読み取った文書からとファイルから「このタグに戻す」・NDEF の消去、を通した。どれも読み取り直して照合 OK。確認ダイアログの書き込み先の UID も正しかった。確認で押してから結果が出るまで 0.46〜0.57 秒。最後にユーザー領域を元に戻し、全 45 ページが書く前と一致した。2 回流して 2 回とも通った。ロック・CFG・パスワードは書いていない（不可逆、または PaSoRi ではパスワード認証ができず戻せないため）。
 - 確かめていない: 書き込みの途中でタグを離す（人の手が要る）、一括発行（タグを入れ替える人の手が要る）、MIFARE Classic（手元に無い）。
 
 ## UX 改修 第 2 回（2026-11-13、敵対的レビュー 39 件 + E2E）で分かった罠

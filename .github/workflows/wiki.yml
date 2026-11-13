@@ -1,0 +1,70 @@
+# リポジトリの wiki/ を GitHub の Wiki（<repo>.wiki.git）に写す。Wiki の正は wiki/（PR で見直せる・CI がリンクを検査する）。
+# Wiki の画面で直接編集した分は、次の同期で上書きされる（wiki/ を直す）。
+#
+# 走るのは: master の wiki/ が変わったとき・手動。
+#
+# **リポジトリが Private の間は何もしない**（Org は Free プランで、Private では Wiki を使えない）。
+# Public にしたあと、Settings → Features → Wikis をオンにし、Wiki の画面で最初のページを 1 枚作る
+# （<repo>.wiki.git は最初のページを作るまで存在しない）。その後、手動で 1 回流す（docs/RELEASING.md）。
+#
+# 書き込みのトークンは GITHUB_TOKEN（contents: write）。Wiki への push が拒まれたら、
+# Wiki だけに書ける fine-grained token を Secrets の WIKI_TOKEN に置く（あればそちらを使う）。
+
+name: wiki
+
+on:
+  push:
+    branches: [master]
+    paths:
+      - wiki/**
+      - .github/workflows/wiki.yml
+  workflow_dispatch:
+
+permissions: {}
+
+concurrency:
+  group: wiki
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    if: ${{ !github.event.repository.private }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version-file: .node-version
+
+      # 壊れたリンクのまま写さない（ci.yml と同じ検査）
+      - name: 文書のリンク
+        run: node tools/check-docs.mjs
+
+      - name: Wiki に写す
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.WIKI_TOKEN || github.token }}
+        run: |
+          set -euo pipefail
+          url="https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.wiki.git"
+          if ! git clone --quiet --depth 1 "$url" wiki-repo 2>/dev/null; then
+            echo "::error::Wiki のリポジトリ（${GITHUB_REPOSITORY}.wiki.git）を取れません。Settings で Wikis をオンにし、Wiki の画面で最初のページを 1 枚作ってから、もう一度流してください。"
+            exit 1
+          fi
+          rsync -a --delete --exclude '.git' wiki/ wiki-repo/
+          cd wiki-repo
+          git add -A
+          if git diff --cached --quiet; then
+            echo "Wiki は最新です"
+            exit 0
+          fi
+          git -c user.name="github-actions[bot]" -c user.email="41898282+github-actions[bot]@users.noreply.github.com" \
+            commit --quiet -m "wiki/ を同期（${GITHUB_SHA::7}）"
+          git push --quiet origin HEAD
+          git show --stat --format='%h %s' HEAD | head -40

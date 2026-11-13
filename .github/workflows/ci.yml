@@ -1,0 +1,75 @@
+# push と PR のたびに回す軽い検査（Linux だけ）。
+#
+# 型検査・単体テスト・ロジックのスモーク・ビルド・第三者のライセンスの通知・CHANGELOG・文書のリンク・
+# Pages のサイトの生成を見る。1 回 約 4〜6 分の見込み（未計測。初回の実行で直す）。
+#
+# 重いもの（E2E・Windows のパッケージ）は release.yml がタグと手動のときだけ回す
+# （Windows のランナーは Linux の 2 倍の課金。リポジトリが Private の間は Org の無料枠を使う）。
+#
+# Action はコミットの SHA で固定する（タグは書き換えられる）。更新は Dependabot（.github/dependabot.yml）。
+# Node の版は .node-version が正（engines・README と合わせる）。
+
+name: ci
+
+on:
+  push:
+    # branches だけを書くと、タグの push はこのワークフローに一致しない（タグは release.yml）
+    branches: [master]
+  pull_request:
+  workflow_dispatch:
+
+# 既定は何も許さない。ジョブごとに要る分だけ許す。
+permissions: {}
+
+concurrency:
+  group: ci-${{ github.ref }}
+  # master は取り消さない（直前の push の結果を必ず残す）。PR は新しい push で古い実行を止める
+  cancel-in-progress: ${{ github.ref != 'refs/heads/master' }}
+
+jobs:
+  check:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    permissions:
+      contents: read
+    env:
+      # Electron の本体（約 100 MB）は単体テストとビルドに要らない。E2E とパッケージは release.yml（Windows）
+      ELECTRON_SKIP_BINARY_DOWNLOAD: '1'
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version-file: .node-version
+          cache: npm
+          cache-dependency-path: package-lock.json
+
+      - run: npm ci
+
+      - name: 型検査
+        run: npm run typecheck
+
+      - name: 単体テスト
+        run: npm run unit
+
+      - name: ロジックのスモーク
+        run: npm run test:smoke
+
+      - name: ビルド
+        run: npm run build
+
+      # 本番の依存・束ねたパッケージが変わったのに通知を作り直していなければ落ちる。
+      # 許可の一覧の外のライセンス（GPL など）が入っても落ちる。
+      - name: THIRD_PARTY_NOTICES.txt が最新か
+        run: npm run notices:check
+
+      - name: CHANGELOG の形（## vNext と今の版の節）
+        run: node tools/changelog-section.mjs --check
+
+      - name: 文書のリンクと、個人の環境の値が無いこと
+        run: npm run docs:check
+
+      - name: Pages のサイトを作れるか
+        run: npm run site:build

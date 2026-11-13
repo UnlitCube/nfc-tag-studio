@@ -133,7 +133,7 @@ export function codeText(code: unknown, lang: LanguageSetting, fallback: ErrorCo
   return errorMessage(isErrorCode(code) ? code : fallback, lang);
 }
 
-/** "041591DA99AE20" -> "04:15:91:DA:99:AE:20" for messages. */
+/** "04A1B2C3D4E5F6" -> "04:A1:B2:C3:D4:E5:F6" for messages. */
 export function formatUidText(uid: string): string {
   const h = uid.replace(/[^0-9a-fA-F]/g, '').toUpperCase();
   return h.match(/.{1,2}/g)?.join(':') ?? h;

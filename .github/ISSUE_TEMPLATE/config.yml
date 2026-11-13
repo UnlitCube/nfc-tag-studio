@@ -1,0 +1,8 @@
+blank_issues_enabled: true
+contact_links:
+  - name: 脆弱性の報告 / Report a security vulnerability
+    url: https://github.com/UnlitCube/nfc-tag-studio/security/advisories/new
+    about: 公開の Issue ではなく、非公開で知らせてください / Please report security problems privately.
+  - name: 使い方（Wiki） / User guide
+    url: https://github.com/UnlitCube/nfc-tag-studio/wiki
+    about: 画面ごとの使い方とトラブルシューティング / How-to and troubleshooting (Japanese).

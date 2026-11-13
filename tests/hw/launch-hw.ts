@@ -2,7 +2,7 @@
 // it writes to the tag on a real reader. Run it only with a tag that may be
 // overwritten (a sacrificial tag), and name that tag's UID:
 //
-//   set NFCTS_HW_WRITE_UID=04DA21D2D83880   (PowerShell: $env:NFCTS_HW_WRITE_UID = '04DA21D2D83880')
+//   set NFCTS_HW_WRITE_UID=04A1B2C3D4E5F6   (PowerShell: $env:NFCTS_HW_WRITE_UID = '04A1B2C3D4E5F6'; the value is an example)
 //   npm run hw:write
 //
 // Safety (the dev PC also has a USB token and a YubiKey on PC/SC):
@@ -42,7 +42,7 @@ export interface HwApp {
   close(): Promise<void>;
 }
 
-/** "04:da:21 ..." -> "04DA21..." */
+/** "04:a1:b2 ..." -> "04A1B2..." */
 export function normUid(s: string): string {
   return s.replace(/[^0-9a-f]/gi, '').toUpperCase();
 }

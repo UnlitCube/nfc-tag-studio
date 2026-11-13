@@ -1,0 +1,28 @@
+name: 要望 / Feature request
+description: こうなるとよい / An idea or improvement.
+labels: [enhancement]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        UID の書き換え・magic card 向けの機能・MIFARE の鍵の解析など、[安全の約束](https://github.com/UnlitCube/nfc-tag-studio/wiki/安全の約束) に反する機能は受け付けません。
+
+        Features that break the [safety promises](https://github.com/UnlitCube/nfc-tag-studio/wiki/安全の約束) (UID writing, magic cards, key cracking) will not be accepted.
+  - type: textarea
+    id: problem
+    attributes:
+      label: 困っていること / The problem
+      description: どんな作業で、何に困っているか / What are you trying to do, and what gets in the way?
+    validations:
+      required: true
+  - type: textarea
+    id: idea
+    attributes:
+      label: こうなるとよい / The idea
+    validations:
+      required: true
+  - type: input
+    id: reader
+    attributes:
+      label: 使っているリーダーとタグ / Reader and tag
+      placeholder: "Sony PaSoRi / NTAG215"

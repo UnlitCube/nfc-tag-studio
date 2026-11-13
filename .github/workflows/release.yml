@@ -1,0 +1,259 @@
+# タグ（v*）を push したら、検査してから Windows 向けの配布物を作り、GitHub Release に載せる。
+#
+#   NFC-Tag-Studio-<版>-win-x64-portable.exe   入れずにそのまま起動する exe（NSIS の自己展開）
+#   NFC-Tag-Studio-<版>-win-x64.zip            展開して NFC Tag Studio.exe を起動する
+#   SHA256SUMS.txt                             上の 2 つの SHA-256（sha256sum -c / CertUtil で照合できる）
+#
+# - workflow_dispatch（手動）は**検査とビルドだけで Release を作らない**。作る物や名前を変えたら、タグの前に手動で 1 回通す。
+# - ファイル名に空白を入れない（GitHub は Release の添付の名前の空白をドットに置き換え、SHA256SUMS と食い違う）。
+#   electron-builder.json の artifactName を [0-9A-Za-z._-] だけにしてある。
+# - 安い検査（版・CHANGELOG・型・単体・通知）を Linux で先に済ませてから、Windows のビルドに入る。
+# - 0.x の間はプレリリースとして出す（README と CHANGELOG の位置付けと同じ）。
+# - 署名はしていない（SmartScreen の警告が出る。README の「既知の制限」）。
+# - 1 回の課金の見込み: Linux 約 6 分 + Windows 約 15 分（×2 倍）。未計測。初回の実行で直す。
+
+name: release
+
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+
+permissions: {}
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false # リリースの途中で殺さない
+
+jobs:
+  # ------------------------------------------------------------------
+  # 版・CHANGELOG・型・単体・通知。ビルドを始める前に落とす。
+  # ------------------------------------------------------------------
+  gate:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    permissions:
+      contents: read
+    env:
+      ELECTRON_SKIP_BINARY_DOWNLOAD: '1'
+    outputs:
+      version: ${{ steps.check.outputs.version }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version-file: .node-version
+          cache: npm
+          cache-dependency-path: package-lock.json
+
+      - run: npm ci
+
+      - id: check
+        name: タグ・package.json・CHANGELOG を突き合わせる
+        shell: bash
+        run: |
+          set -euo pipefail
+          version=$(node -p "require('./package.json').version")
+          if [ "${GITHUB_REF_TYPE}" = "tag" ] && [ "${GITHUB_REF_NAME}" != "v${version}" ]; then
+            echo "::error::タグ ${GITHUB_REF_NAME} と package.json の版 ${version} がずれています"
+            exit 1
+          fi
+          # Release の本文は CHANGELOG の「## v<版> (YYYY-MM-DD)」の節。切り出せない・## vNext に項目が残っている・
+          # 「作業中」が残っている、のどれでも止める（tools/changelog-section.mjs）。
+          node tools/changelog-section.mjs --release --out notes.md
+          test -s notes.md || { echo "::error::リリースノートが空です"; exit 1; }
+          echo "version=${version}" >> "$GITHUB_OUTPUT"
+          echo "version = ${version}"
+
+      - run: npm run typecheck
+      - run: npm run unit
+      - run: npm run test:smoke
+      - run: npm run build
+      - run: npm run notices:check
+      - run: npm run docs:check
+
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: release-notes
+          path: notes.md
+          if-no-files-found: error
+          retention-days: 3
+
+  # ------------------------------------------------------------------
+  # Windows: E2E → パッケージ → 中身の確認 → パッケージ版の起動
+  # ------------------------------------------------------------------
+  windows:
+    needs: gate
+    runs-on: windows-2025
+    timeout-minutes: 45
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version-file: .node-version
+          cache: npm
+          cache-dependency-path: package-lock.json
+
+      # electron の zip（約 110 MB）と electron-builder の道具（NSIS など）
+      - name: electron のキャッシュを復元
+        id: cache
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: |
+            ~/AppData/Local/electron/Cache
+            ~/AppData/Local/electron-builder/Cache
+          key: eb-win-v1-${{ hashFiles('package-lock.json') }}
+          restore-keys: eb-win-v1-
+
+      - run: npm ci
+
+      # 仮想リーダーだけで画面の流れを通す（NFCTS_NO_PCSC=1 と koffi の番人。tests/e2e/launch.ts）。
+      # spec が 0 件なら Playwright は失敗で終わる（--pass-with-no-tests を付けない）。
+      - name: E2E（仮想リーダー）
+        run: npm run e2e
+
+      - name: パッケージ（portable と zip）
+        run: npm run dist:win
+
+      - name: できたものと中身を確かめる
+        shell: bash
+        env:
+          V: ${{ needs.gate.outputs.version }}
+        run: |
+          set -euo pipefail
+          cd release
+          ls -la
+          expected=("NFC-Tag-Studio-$V-win-x64-portable.exe" "NFC-Tag-Studio-$V-win-x64.zip")
+          for f in "${expected[@]}"; do
+            test -s "$f" || { echo "::error::$f が無い（または空）"; exit 1; }
+          done
+          d=win-unpacked
+          test -f "$d/NFC Tag Studio.exe"                  || { echo "::error::本体の exe が無い"; exit 1; }
+          test -f "$d/resources/app.asar"                  || { echo "::error::app.asar が無い"; exit 1; }
+          test -f "$d/resources/LICENSE.txt"               || { echo "::error::LICENSE が同梱されていない"; exit 1; }
+          test -f "$d/resources/THIRD_PARTY_NOTICES.txt"   || { echo "::error::THIRD_PARTY_NOTICES が同梱されていない"; exit 1; }
+          test -f "$d/LICENSES.chromium.html"              || { echo "::error::Chromium のライセンス文が無い"; exit 1; }
+          test -f "$d/resources/app.asar.unpacked/node_modules/@koromix/koffi-win32-x64/win32_x64/koffi.node" \
+            || { echo "::error::koffi のネイティブのモジュールが app.asar.unpacked に無い"; exit 1; }
+          # asar の一覧は Windows では \ 区切りで出るので、区切りを問わずに探す。
+          # パイプで grep -q すると書き手が SIGPIPE で落ちうるので、いったんファイルに書く。
+          npx --no-install asar list "$d/resources/app.asar" > ../asar-list.txt
+          test -s ../asar-list.txt || { echo "::error::asar の一覧が空（走査が空振りしている）"; exit 1; }
+          if grep -qE '\.map$' ../asar-list.txt; then echo "::error::sourcemap が入っている"; exit 1; fi
+          if grep -qE 'bundled-modules\.json$' ../asar-list.txt; then echo "::error::.bundled-modules.json が入っている"; exit 1; fi
+          # koffi 3 は src/koffi/*.js を実行時に読む（外すと PC/SC を読み込めない）。外すのは C/C++ のソース・ヘッダ・文書・リンク用の .lib
+          if grep -qE '[\\/]koffi[\\/](vendor|doc|lib)([\\/]|$)' ../asar-list.txt; then echo "::error::koffi のヘッダ・文書が入っている"; exit 1; fi
+          if grep -qE '[\\/](koffi|@koromix)[\\/].*\.(cc|hh|h|inc|S|asm|lib|exp|pdb)$' ../asar-list.txt; then echo "::error::koffi の C/C++ のソース・.lib が入っている"; exit 1; fi
+          grep -qE '[\\/]koffi[\\/]src[\\/]koffi[\\/]index\.js$' ../asar-list.txt \
+            || { echo "::error::koffi の src/koffi/index.js が無い（PC/SC を読み込めない）"; exit 1; }
+          if grep -qE '[\\/]src[\\/](main|renderer|shared)[\\/]' ../asar-list.txt; then echo "::error::TypeScript のソースが入っている"; exit 1; fi
+
+      - name: パッケージ版が起動して画面を出すか
+        run: node scripts/smoke-packaged.cjs "release/win-unpacked/NFC Tag Studio.exe" --timeout 90
+
+      - name: electron のキャッシュを保存
+        if: always() && steps.cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: |
+            ~/AppData/Local/electron/Cache
+            ~/AppData/Local/electron-builder/Cache
+          key: eb-win-v1-${{ hashFiles('package-lock.json') }}
+
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: dist-windows
+          path: |
+            release/NFC-Tag-Studio-*-win-x64-portable.exe
+            release/NFC-Tag-Studio-*-win-x64.zip
+          if-no-files-found: error
+          compression-level: 0 # 中身は圧縮済み。zip しても縮まず時間だけ損する
+          retention-days: 3
+
+  # ------------------------------------------------------------------
+  # 集めて確かめ、Release を作る。Release を作る手順だけがタグ限定（手動では、集めて照合するところまで走る）
+  # ------------------------------------------------------------------
+  release:
+    needs: [gate, windows]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    permissions:
+      contents: write # Release を作るのに要る唯一の権限
+    env:
+      VERSION: ${{ needs.gate.outputs.version }}
+    steps:
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: dist-windows
+          path: dist
+
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: release-notes
+          path: .
+
+      - name: 集まったものを確かめ、SHA256SUMS を作る
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "$VERSION" || { echo "::error::gate から版を受け取れていない"; exit 1; }
+          cd dist
+          ls -la
+          # 数ではなく名前で確かめる（作る物を変えたときに取り残さない）
+          expected=("NFC-Tag-Studio-$VERSION-win-x64-portable.exe" "NFC-Tag-Studio-$VERSION-win-x64.zip")
+          for f in "${expected[@]}"; do
+            test -s "$f" || { echo "::error::$f が無い（または空）"; exit 1; }
+          done
+          n=$(find . -mindepth 1 -maxdepth 1 | wc -l)
+          [ "$n" -eq "${#expected[@]}" ] || { echo "::error::一覧に無いファイルがある（${#expected[@]} 個のはずが $n 個）"; exit 1; }
+          sha256sum "${expected[@]}" > SHA256SUMS.txt
+          sha256sum -c SHA256SUMS.txt
+          {
+            echo "### NFC Tag Studio v$VERSION"
+            echo
+            echo '```'
+            cat SHA256SUMS.txt
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Release を作る
+        if: github.event_name == 'push' && github.ref_type == 'tag'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -s notes.md || { echo "::error::リリースノートが空"; exit 1; }
+          # gh は「ドラフトで作る → 全部上げる → 公開」の順に動くので、途中で落ちても半端な公開は残らない
+          pre=()
+          case "$GITHUB_REF_NAME" in v0.*) pre=(--prerelease) ;; esac
+          gh release create "$GITHUB_REF_NAME" dist/* \
+            --repo "$GITHUB_REPOSITORY" \
+            --title "NFC Tag Studio $GITHUB_REF_NAME" \
+            --notes-file notes.md \
+            --verify-tag \
+            "${pre[@]}"
+
+  # Release が出たら、Pages のダウンロードの案内を新しい版に向け直す。
+  # タグの run から workflow_call で呼ぶと、github-pages の環境が既定のブランチ以外からの公開を拒むので、
+  # master の上で pages.yml を起動する（GITHUB_TOKEN で作った Release は他のワークフローを起動しないが、workflow_dispatch は起動できる）。
+  pages:
+    needs: release
+    if: github.event_name == 'push' && github.ref_type == 'tag' && !github.event.repository.private
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions:
+      actions: write
+    steps:
+      - name: サイトを作り直す（master で）
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh workflow run pages.yml --repo "$GITHUB_REPOSITORY" --ref master

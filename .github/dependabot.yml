@@ -1,0 +1,13 @@
+# 依存の更新を PR で持ってくる。
+# ワークフローの Action はコミットの SHA で固定しているので、その更新をここが担う。
+# Private の間は PR と CI の分数を増やさないため、github-actions だけにしている（npm を足すかは公開後に決める）。
+# npm の本番の依存が変わる PR は、npm run notices で通知を作り直さないと CI が落ちる（意図どおり）。
+version: 2
+updates:
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+    groups:
+      actions:
+        patterns: ['*']

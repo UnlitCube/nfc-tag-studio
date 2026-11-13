@@ -1,0 +1,1 @@
+[GitHub](https://github.com/UnlitCube/nfc-tag-studio) · [ダウンロード](https://github.com/UnlitCube/nfc-tag-studio/releases) · [不具合の報告・要望](https://github.com/UnlitCube/nfc-tag-studio/issues) · MIT License · この Wiki の元はリポジトリの `wiki/` です

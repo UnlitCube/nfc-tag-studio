@@ -1,0 +1,75 @@
+name: 不具合の報告 / Bug report
+description: 説明どおりに動かない / Something does not work as described.
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        報告ありがとうございます。**UID・鍵・パスワード・タグのダンプ（.nfcdump・.bin）は貼らないでください。** 必要なら架空の値（例: `04:A1:B2:C3:D4:E5:F6`）に置き換えてください。
+        脆弱性は Issue ではなく、[非公開の報告](https://github.com/UnlitCube/nfc-tag-studio/security/advisories/new) で知らせてください。
+
+        Thanks for reporting. **Do not paste UIDs, keys, passwords or tag dumps.** Security problems: please use [private reporting](https://github.com/UnlitCube/nfc-tag-studio/security/advisories/new).
+  - type: input
+    id: version
+    attributes:
+      label: アプリの版 / App version
+      description: 「設定」の「このアプリについて」に出ます / Shown in Settings → About.
+      placeholder: "0.1.0"
+    validations:
+      required: true
+  - type: input
+    id: windows
+    attributes:
+      label: Windows の版 / Windows version
+      placeholder: "Windows 11 24H2"
+    validations:
+      required: true
+  - type: dropdown
+    id: reader
+    attributes:
+      label: リーダー / Reader
+      options:
+        - Sony PaSoRi（RC-S380 など）
+        - ACR122U
+        - ACS ACR1252U など
+        - 仮想リーダー / Virtual reader
+        - その他 / Other
+    validations:
+      required: true
+  - type: dropdown
+    id: tag
+    attributes:
+      label: タグ / Tag
+      options:
+        - NTAG213
+        - NTAG215
+        - NTAG216
+        - MIFARE Classic 1K
+        - MIFARE Classic 4K
+        - FeliCa Lite-S
+        - その他・不明 / Other or unknown
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: 手順 / Steps to reproduce
+      placeholder: |
+        1. 「NDEF 編集」で URL のレコードを足す
+        2. ［タグに書き込む］を押す
+        3. …
+    validations:
+      required: true
+  - type: textarea
+    id: actual
+    attributes:
+      label: 起きたこと / What happened
+      description: 画面に出た文をそのまま書いてください（UID は伏せて） / Paste the message shown (mask the UID).
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: 期待したこと / What you expected
+    validations:
+      required: true

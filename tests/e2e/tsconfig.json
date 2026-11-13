@@ -1,10 +1,23 @@
 {
   "extends": "../../tsconfig.base.json",
   "compilerOptions": {
-    "lib": ["ES2022", "DOM", "DOM.Iterable"],
-    "types": ["node"],
+    "lib": [
+      "ES2022",
+      "DOM",
+      "DOM.Iterable"
+    ],
+    "types": [
+      "node"
+    ],
     "noEmit": true,
     "baseUrl": "../.."
   },
-  "include": ["./**/*.ts", "../hw/**/*.ts", "../../playwright.config.ts", "../../playwright.hw.config.ts"]
+  "include": [
+    "./**/*.ts",
+    "../hw/**/*.ts",
+    "../shots/**/*.ts",
+    "../../playwright.config.ts",
+    "../../playwright.hw.config.ts",
+    "../../playwright.shots.config.ts"
+  ]
 }

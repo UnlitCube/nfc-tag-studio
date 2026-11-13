@@ -1,0 +1,157 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>NFC Tag Studio</title>
+  <meta name="description" content="A Windows desktop app to read, edit, back up and batch-issue the NFC tags your organization manages (NTAG, MIFARE Classic, FeliCa Lite-S). Free, MIT licensed.">
+  <meta property="og:type" content="website">
+  <meta property="og:title" content="NFC Tag Studio">
+  <meta property="og:description" content="Read, edit and batch-issue the NFC tags your organization manages. Free and open source.">
+  <meta property="og:image" content="https://unlitcube.github.io/nfc-tag-studio/images/en/home.png">
+  <link rel="icon" href="../assets/icon.svg" type="image/svg+xml">
+  <link rel="alternate" hreflang="ja" href="../">
+  <link rel="stylesheet" href="../assets/site.css">
+</head>
+<body>
+  <header class="site-header">
+    <div class="wrap">
+      <a class="brand" href="./"><img src="../assets/icon.svg" alt="" width="32" height="32">NFC Tag Studio</a>
+      <nav class="site-nav" aria-label="On this page">
+        <a href="#features">Features</a>
+        <a href="#readers">Readers &amp; tags</a>
+        <a href="#safety">Safety</a>
+        <a href="https://github.com/UnlitCube/nfc-tag-studio/wiki">Guide (Wiki, Japanese)</a>
+        <a href="../" lang="ja" hreflang="ja">日本語</a>
+      </nav>
+    </div>
+  </header>
+
+  <main>
+    <section class="hero">
+      <div class="wrap">
+        <div>
+          <span class="eyebrow">Free &amp; open source (MIT)</span>
+          <h1><span class="nb">Issue and edit</span> <span class="nb">your organization's NFC tags.</span></h1>
+          <p class="lead">A Windows desktop app to read, edit, write, back up and batch-issue NTAG213/215/216, MIFARE Classic and FeliCa Lite-S tags &mdash; for numbering employee and member cards, or writing URLs and Wi-Fi settings.</p>
+          <div class="actions">
+            <a class="btn btn-primary" href="https://github.com/UnlitCube/nfc-tag-studio/releases">Download</a>
+            <a class="btn" href="https://github.com/UnlitCube/nfc-tag-studio/blob/master/README.en.md">Read the README</a>
+          </div>
+          <p class="meta">v{{VERSION}} (beta) &middot; Windows 10 / 11 (x64) &middot; portable exe and zip, no installer</p>
+        </div>
+        <div class="window" aria-hidden="true">
+          <div class="window-bar"><span></span><span></span><span></span></div>
+          <img src="../images/en/home.png" alt="" width="1920" height="1200">
+        </div>
+      </div>
+    </section>
+
+    <section id="features">
+      <div class="wrap">
+        <h2>Features</h2>
+        <p class="sub">Place a tag and it is read automatically; every screen shows the tag on the reader the same way. Before writing, the app shows the target tag (type and UID).</p>
+        <div class="features">
+          <article class="card">
+            <img src="../images/en/ndef.png" alt="The NDEF editor with a URL record, a text record and the capacity meter" width="1920" height="1200" loading="lazy">
+            <div class="body"><h3>NDEF editor</h3><p>Compose URLs, text, Wi-Fi settings, contacts, app launch records and more that phones can read, and write them.</p></div>
+          </article>
+          <article class="card">
+            <img src="../images/en/hex.png" alt="The binary editor with a hex grid and colour-coded areas" width="1920" height="1200" loading="lazy">
+            <div class="body"><h3>Binary editor</h3><p>Edit memory byte by byte with colour-coded areas, explanations of bits, counters and a guided settings editor.</p></div>
+          </article>
+          <article class="card">
+            <img src="../images/en/issue.png" alt="The batch issue screen" width="1920" height="1200" loading="lazy">
+            <div class="body"><h3>Batch issue</h3><p>Write sequence numbers, CSV rows or NDEF to one tag after another, with skipping of issued tags, verification, resume and an issue log.</p></div>
+          </article>
+          <article class="card">
+            <img src="../images/en/backup.png" alt="The backup and duplicate screen" width="1920" height="1200" loading="lazy">
+            <div class="body"><h3>Backup &amp; duplicate</h3><p>Save a tag to .nfcdump, .bin or Flipper .nfc and write it back to the same or another tag (the UID is never copied).</p></div>
+          </article>
+          <article class="card">
+            <img src="../images/en/schema.png" alt="The data schema editor" width="1920" height="1200" loading="lazy">
+            <div class="body"><h3>Data schema</h3><p>Lay out where and how an ID is written on the tag, save it as a file and use it for batch issue.</p></div>
+          </article>
+          <article class="card">
+            <img src="../images/en/keys.png" alt="The MIFARE keys screen" width="1920" height="1200" loading="lazy">
+            <div class="body"><h3>MIFARE keys</h3><p>Register the keys you operate. They are masked on screen and stored encrypted with Windows DPAPI.</p></div>
+          </article>
+        </div>
+      </div>
+    </section>
+
+    <section id="readers">
+      <div class="wrap">
+        <h2>Readers &amp; tags</h2>
+        <p class="sub">The app talks to NFC readers through PC/SC (the Windows Smart Card service). Without a reader, the built-in virtual reader lets you try everything.</p>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr><th scope="col">Reader</th><th scope="col">NTAG213/215/216</th><th scope="col">FeliCa Lite-S</th><th scope="col">MIFARE Classic</th><th scope="col">Checked with</th></tr>
+            </thead>
+            <tbody>
+              <tr><td>Sony PaSoRi (RC-S380)</td><td>Read &amp; write (no password auth or counters)</td><td>Read &amp; write</td><td>Not checked yet</td><td><span class="tag-ok">Real hardware</span></td></tr>
+              <tr><td>ACR122U and similar</td><td>Read &amp; write, password auth, counters</td><td>Read &amp; write</td><td>Read &amp; write with your keys</td><td><span class="tag-sim">Virtual reader</span></td></tr>
+              <tr><td>Virtual reader (built in)</td><td>Everything</td><td>Everything</td><td>Everything</td><td>&mdash;</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
+    <section id="safety">
+      <div class="wrap">
+        <h2>Safety by design</h2>
+        <p class="sub">A tool for tags you are authorized to manage. It is built so that it cannot be used to clone other people's cards or bypass authentication.</p>
+        <ul class="promises">
+          <li><strong>The UID is never written</strong><span>The UID (serial number) is read-only. There is no support for UID-changing "magic" cards.</span></li>
+          <li><strong>No key cracking</strong><span>MIFARE Classic sectors open only with keys the operator registers. No brute force or key recovery.</span></li>
+          <li><strong>No secrets left behind</strong><span>Keys and passwords never go into logs, the issue log or backup files.</span></li>
+          <li><strong>Irreversible steps need confirmation</strong><span>Locking and password settings require advanced mode and an explicit confirmation.</span></li>
+          <li><strong>Nothing sent to non-NFC devices</strong><span>PC/SC devices that are not NFC readers, such as USB security tokens, never receive commands.</span></li>
+          <li><strong>Writes are verified</strong><span>Every write is read back and compared; failures show which pages or blocks were not written and what to do next.</span></li>
+        </ul>
+      </div>
+    </section>
+
+    <section id="start">
+      <div class="wrap">
+        <h2>Getting started</h2>
+        <ol class="steps">
+          <li><strong>Download and run</strong><span>Get the portable exe or the zip from Releases and start it &mdash; no installation needed.</span></li>
+          <li><strong>Connect a reader</strong><span>For a Sony PaSoRi, install "NFC Port Software" first. No reader? Use the virtual reader.</span></li>
+          <li><strong>Place a tag</strong><span>Keep it on the reader; it is read automatically. Edit it in the NDEF or binary editor and press "Write to tag".</span></li>
+        </ol>
+        <p class="meta">The executables are not code-signed, so Windows SmartScreen asks for confirmation the first time.</p>
+      </div>
+    </section>
+
+    <section id="limits">
+      <div class="wrap">
+        <h2>Current limitations</h2>
+        <ul class="notes">
+          <li>Windows (x64) only. There are no macOS or Linux builds.</li>
+          <li>Storage-type readers such as the Sony PaSoRi cannot do NTAG password authentication, NFC counters or signature reads.</li>
+          <li>ACR122U-type readers and MIFARE Classic have been checked with the virtual reader only.</li>
+          <li>FeliCa support is limited to FeliCa Lite-S (no transit cards).</li>
+        </ul>
+        <p class="meta">See the <a href="https://github.com/UnlitCube/nfc-tag-studio/blob/master/CHANGELOG.md">CHANGELOG</a> (Japanese) for changes.</p>
+      </div>
+    </section>
+  </main>
+
+  <footer class="site-footer">
+    <div class="wrap">
+      <div class="links">
+        <a href="https://github.com/UnlitCube/nfc-tag-studio">GitHub</a>
+        <a href="https://github.com/UnlitCube/nfc-tag-studio/releases">Releases</a>
+        <a href="https://github.com/UnlitCube/nfc-tag-studio/issues">Issues</a>
+        <a href="https://github.com/UnlitCube/nfc-tag-studio/security/policy">Report a vulnerability</a>
+        <a href="../" lang="ja" hreflang="ja">日本語</a>
+      </div>
+      <p>&copy; 2026 UnlitCube. MIT License.</p>
+      <p>NFC Tag Studio is not a product of, and is not affiliated with or endorsed by, NXP Semiconductors, Sony, Advanced Card Systems or the NFC Forum. MIFARE and NTAG are trademarks of NXP B.V.; FeliCa and PaSoRi are trademarks of Sony Group Corporation. Other names are trademarks or registered trademarks of their respective owners.</p>
+    </div>
+  </footer>
+</body>
+</html>

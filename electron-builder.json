@@ -2,25 +2,61 @@
   "appId": "jp.unlitcube.nfc-tag-studio",
   "productName": "NFC Tag Studio",
   "copyright": "Copyright (c) 2026 UnlitCube",
-  "directories": { "output": "release", "buildResources": "build" },
-  "files": ["out/**/*", "package.json", "!**/*.map"],
-  "asarUnpack": ["**/node_modules/koffi/**", "**/node_modules/@koromix/**"],
+  "directories": {
+    "output": "release",
+    "buildResources": "build"
+  },
+  "files": [
+    "out/**/*",
+    "!out/**/.bundled-modules.json",
+    "!**/*.map",
+    "package.json",
+    "!**/node_modules/koffi/doc/**",
+    "!**/node_modules/koffi/vendor/**",
+    "!**/node_modules/koffi/lib/**",
+    "!**/node_modules/koffi/src/**/*.{cc,hh,h,inc,S,asm,def,txt}",
+    "!**/node_modules/koffi/CHANGELOG.md",
+    "!**/node_modules/@koromix/**/*.{lib,exp,pdb}"
+  ],
+  "asarUnpack": [
+    "**/node_modules/koffi/**",
+    "**/node_modules/@koromix/**"
+  ],
+  "extraResources": [
+    {
+      "from": "LICENSE",
+      "to": "LICENSE.txt"
+    },
+    {
+      "from": "THIRD_PARTY_NOTICES.txt",
+      "to": "THIRD_PARTY_NOTICES.txt"
+    }
+  ],
+  "npmRebuild": false,
   "publish": null,
+  "electronFuses": {
+    "runAsNode": false,
+    "enableNodeOptionsEnvironmentVariable": false
+  },
   "win": {
-    "target": [{ "target": "portable", "arch": ["x64"] }, { "target": "zip", "arch": ["x64"] }],
-    "artifactName": "${productName}-${version}-win-${arch}.${ext}"
+    "target": [
+      {
+        "target": "portable",
+        "arch": [
+          "x64"
+        ]
+      },
+      {
+        "target": "zip",
+        "arch": [
+          "x64"
+        ]
+      }
+    ],
+    "requestedExecutionLevel": "asInvoker",
+    "artifactName": "NFC-Tag-Studio-${version}-win-${arch}.${ext}"
   },
   "portable": {
-    "artifactName": "${productName}-${version}-win-${arch}-portable.${ext}"
-  },
-  "mac": {
-    "target": [{ "target": "dmg", "arch": ["arm64", "x64"] }, { "target": "zip", "arch": ["arm64", "x64"] }],
-    "category": "public.app-category.utilities",
-    "artifactName": "${productName}-${version}-mac-${arch}.${ext}"
-  },
-  "linux": {
-    "target": [{ "target": "AppImage", "arch": ["x64"] }],
-    "category": "Utility",
-    "artifactName": "${productName}-${version}-linux-x64.${ext}"
+    "artifactName": "NFC-Tag-Studio-${version}-win-${arch}-portable.${ext}"
   }
 }

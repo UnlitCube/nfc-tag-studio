@@ -18,3 +18,6 @@ release/
 Thumbs.db
 .vscode/
 .idea/
+
+# GitHub Pages のサイトの生成物（npm run site:build）
+site-dist/
