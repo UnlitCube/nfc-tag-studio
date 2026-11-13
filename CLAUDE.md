@@ -51,6 +51,7 @@
 - **koffi のプリビルドは OS ごとの optionalDependencies**。Windows と Linux の CI で入るものが違い、通知が食い違う → 通知の道具は配布先（win32-x64）向けだけを lock の `os`・`cpu` で選び、入っていなければ lock の版とライセンス・koffi の文を使う。
 - **Org（UnlitCube）は Free プランなので、Private の間は Pages と Wiki を使えない。** `pages.yml`・`wiki.yml` は `!github.event.repository.private` のときだけ動く。Wiki のリポジトリは、画面で最初のページを作るまで存在しない（`docs/RELEASING.md`）。
 - **WSL（Ubuntu-24.04）が `Wsl/Service/E_UNEXPECTED` で応答しないことがある**（2026-11-13）。Docker Desktop も WSL の上で動いているので `wsl --shutdown` はしない。Linux での確認は `docker run node:<.node-version>-bookworm` で、作業ツリーの写し（`git ls-files -co --exclude-standard` の tar）に CI の手順を流した。
+- **遅い PC では、起動直後に画面の問い合わせが "No handler registered for 'settings:get'" で失敗し、ホームが出なかった**（GitHub Actions の 2 コアの Windows のランナーで E2E 13 本中 6 本が落ちて分かった。手元の速い PC では出ない）→ `app.whenReady` で窓を先に作り、IPC の受け口（`startServices` の `registerIpc`）を後に用意していた → 受け口を用意してから窓を作る（`startServices` が失敗しても窓は出す）→ `tests/main-startup-order.test.ts`（古い順番で落ちることを確認）。手元での再現は `startServices` の先頭に 1.5 秒の遅延を入れて E2E を流す。
 - 公開する文書に、実物のタグの UID・個人のパス・個人のメールアドレスを書かない（`npm run docs:check` が形で見る。値の一覧はリポジトリに置かない）。
 
 ## 実機で分かったこと（2026-11-09、Sony PaSoRi 3.0 + 本物の NTAG215）

@@ -52,6 +52,7 @@ v0.1.0 を公開する前の、リポジトリの中での変更の記録です�
 - CI（`ci.yml`）・リリース（`release.yml`。タグで Windows の E2E・パッケージ・中身と起動の確認・SHA256SUMS・Release）・Pages（`pages.yml`）・Wiki の同期（`wiki.yml`）・Dependabot（Action だけ）を足しました。Action はコミットの SHA で、ランナーと Node は版で固定しています。
 - 同梱する第三者のソフトのライセンスの通知（`THIRD_PARTY_NOTICES.txt`）を、ビルドに入ったモジュールから作るようにし、配布物に `LICENSE.txt` と一緒に入れました。
 - 配布物の名前から空白を外しました（`NFC-Tag-Studio-<版>-win-x64-portable.exe`・`…-win-x64.zip`）。macOS・Linux の設定（未検証）を外しました。
+- 遅い PC で、起動した直後に画面が出ない（設定とリーダーの状態を取れない）ことがある不具合を直しました（画面より先に、main の受け口を用意します）。
 - 配布物から、実行に要らない koffi のソース・ヘッダ・`.lib` と、ビルドの記録のファイルを外しました。Electron の fuse で `ELECTRON_RUN_AS_NODE` と `NODE_OPTIONS` を無効にしました。
 
 ### 2026-11-10〜13 の改修

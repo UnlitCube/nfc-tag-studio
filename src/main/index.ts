@@ -130,8 +130,19 @@ app.whenReady().then(async () => {
   session.defaultSession.setPermissionRequestHandler((_wc, _perm, cb) => cb(false));
   session.defaultSession.setPermissionCheckHandler(() => false);
 
+  // Register the IPC handlers (startServices) BEFORE the window loads the renderer.
+  // The renderer asks for settings / reader status as soon as it starts; on a slow
+  // PC (2 vCPU CI runner, 2026-11-13) the window used to win the race and every
+  // call failed with "No handler registered for 'settings:get'" - the home screen
+  // never appeared. Pushes sent before the window exists are dropped; the renderer
+  // reads the current state itself on start. If the services fail, the window still
+  // opens (the renderer shows the error instead of the app silently not starting).
+  try {
+    await startServices(() => mainWindow);
+  } catch (err) {
+    console.error('[start] startServices failed', err);
+  }
   mainWindow = createWindow();
-  await startServices(() => mainWindow);
 
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) mainWindow = createWindow();
