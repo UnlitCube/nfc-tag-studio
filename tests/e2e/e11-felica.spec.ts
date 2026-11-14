@@ -1,7 +1,7 @@
 // E11 FeliCa Lite-S (virtual): home calls the id "IDm" and offers no NDEF; the
 // binary editor edits a user block (S_PAD) and writes it.
 import { expect, test } from './launch';
-import { confirmTarget, dialog, editByte, nav, readVirtualTag, shot, startWithReadTag, view } from './helpers';
+import { confirmTarget, dialog, editByte, openFromHome, readVirtualTag, shot, startWithReadTag, view } from './helpers';
 import { t } from './i18n';
 
 const BYTE = 32; // S_PAD2, byte 0 (FeliCa unit = 16-byte block)
@@ -18,7 +18,7 @@ test('E11 FeliCa Lite-S: ホームは IDm と表示し NDEF を出さない → 
   await expect(body.locator('dt').filter({ hasText: new RegExp(`^${t('home.doc.ndef')}$`) })).toHaveCount(0);
   await shot(page, 'E11-01-home-felica');
 
-  const hex = await nav(page, 'hex');
+  const hex = await openFromHome(page, 'hex'); // D15: a one-way copy of the home screen's tag
   await editByte(page, BYTE, '5A');
   await expect(page.getByTestId('status-dirty')).toHaveText(t('shell.status.dirtyBlocks', { n: 1 }));
   await hex.getByTestId('hex-write').click();

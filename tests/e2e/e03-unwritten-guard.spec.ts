@@ -3,7 +3,7 @@
 //  - placing a different tag while editing does NOT replace the document (auto-read
 //    stays away from a dirty document) and the screen says "a different tag".
 import { expect, test } from './launch';
-import { dialog, editByte, formatUid, nav, newTag, readerStatus, shot, startWithReadTag, view } from './helpers';
+import { dialog, editByte, formatUid, nav, newTag, openFromHome, readerStatus, shot, startWithReadTag, view } from './helpers';
 import { prefix, t } from './i18n';
 
 const BYTE = 44; // NTAG215 page 11, byte 0
@@ -11,7 +11,8 @@ const BYTE = 44; // NTAG215 page 11, byte 0
 test('E3 未書き込みの確認: キャンセルで残る・破棄で置き換わる・別のタグは自動で置き換えない', async ({ nfc }) => {
   const { page } = nfc;
   const uidA = await startWithReadTag(page, 'NTAG215');
-  const hex = await nav(page, 'hex');
+  // D15: the home screen's tag goes to the binary editor only with "Open in binary editor".
+  const hex = await openFromHome(page, 'hex');
   const cell = hex.getByTestId('hex-grid').locator('.hx-cell').nth(BYTE);
   const readBtn = hex.getByTestId('hex-docbar').getByRole('button', { name: t('hex.doc.read'), exact: true });
 
@@ -56,10 +57,12 @@ test('E3 未書き込みの確認: キャンセルで残る・破棄で置き換
   await expect(hex.getByTestId('hex-doc-source')).toContainText(formatUid(uidA));
   await shot(page, 'E3-02-hex-other-tag');
 
+  // The home screen keeps its own read of tag A (D15): B is "another tag" there too, but the
+  // binary editor's unsaved edits are not the home screen's (no "unsaved" line on home).
   const home = await nav(page, 'home');
   await expect(home.getByTestId('tag-on-reader-other')).toContainText(t('reader.otherTag'));
   await expect(home.getByTestId('home-guide')).toContainText(t('home.readyOther.title'));
-  await expect(home.getByTestId('home-guide')).toContainText(t('home.readyOther.dirty'));
+  await expect(home.getByTestId('home-guide')).not.toContainText(t('home.readyOther.dirty'));
   await expect(home.getByTestId('home-doc-source')).toContainText(prefix('home.doc.sourceCard'));
   await expect(home.getByTestId('home-doc-body').getByTestId('uid-text')).toHaveText(formatUid(uidA));
   await expect(view(page, 'home').getByTestId('home-doc-on-reader')).toHaveAttribute('data-where', 'other-tag');

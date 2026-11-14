@@ -56,7 +56,6 @@ import {
   ShieldAlert,
   Undo2,
   Upload,
-  X,
 } from 'lucide-react';
 import type { TagKind } from '@shared/tags';
 import {
@@ -93,6 +92,7 @@ import {
 import { TagOnReader, useOpBlockText } from '../../components/TagOnReader';
 import { ResolveReturn } from '../../components/shell/ResolveReturn';
 import { LastWriteCallout } from '../../components/LastWriteCallout';
+import { ExitButton } from '../../components/ExitButton';
 import { useAppStore } from '../../store/app';
 import { useT } from '../../i18n';
 import type { MsgKey } from '../../i18n';
@@ -1338,9 +1338,6 @@ function HexEditor(sh: Shared) {
                 {t('hex.pw.toggle')}
               </Button>
             ) : null}
-            <Button size="sm" variant="ghost" icon={X} disabled={lockedUi} onClick={() => void actions.close()}>
-              {t('hex.doc.close')}
-            </Button>
           </div>
         </div>
 
@@ -1651,6 +1648,8 @@ function HexEditor(sh: Shared) {
             {showPlaceHint ? <span className="small muted">{t('hex.placeShort')}</span> : null}
           </div>
           <div className="hx-run-main">
+            {/* D14: back to the start (the entry screen), the same place and words as every editing screen. */}
+            <ExitButton dirty={changedCount > 0} disabled={lockedUi} onExit={() => void actions.close()} testId="hex-exit" />
             {changedCount > 0 ? <span className="small muted">{t(isPage ? 'hex.doc.dirtyPages' : 'hex.doc.dirtyBlocks', { n: changedCount })}</span> : null}
             <Button
               icon={Upload}

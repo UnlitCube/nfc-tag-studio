@@ -48,8 +48,9 @@ function render(view: FunctionComponent): string {
   return renderToStaticMarkup(createElement(view));
 }
 
-function openCardDoc(img: TagImage) {
-  useAppStore.getState().openImage(img, { type: 'card', uid: img.uid });
+/** D15: the backup screen's own source (store.pageDocs.backup). */
+function openCardDoc(img: TagImage, opts?: { standardKeysOnly?: boolean }) {
+  useAppStore.getState().openPageDoc('backup', img, { type: 'card', uid: img.uid }, opts);
 }
 
 /** Every <button ...> tag with the given data-testid. */
@@ -65,6 +66,7 @@ beforeEach(() => {
   useAppStore.setState({
     settings: { ...DEFAULT_SETTINGS, language: 'ja' },
     doc: null,
+    pageDocs: { home: null, ndef: null, backup: null },
     reader: reader(null),
     busyOp: null,
     lastWrite: null,
@@ -82,7 +84,7 @@ describe('R-WRITE-3: "Open file" waits for a read / write started on another scr
     expect(buttons(render(BackupView), 'backup-open').map(isDisabled)).toEqual([true]);
   });
 
-  it('a document open (the binary editor is writing it): disabled', () => {
+  it('a backup source open (another screen is writing): disabled', () => {
     openCardDoc(blankImage('NTAG215', UID_NTAG));
     useAppStore.setState({ reader: reader(card(UID_NTAG, 'NTAG215')) });
     expect(buttons(render(BackupView), 'backup-open').map(isDisabled)).toEqual([false]);
@@ -111,7 +113,7 @@ describe('D9 / R-UX-4: automatic reading tries only the standard keys (said wher
   it('MIFARE sectors left unread by the automatic read point at "Read tag" (the registered keys); NTAG keeps the plain text', () => {
     const mf = blankImage('MIFARE_CLASSIC_1K', UID_MF);
     for (const b of [8, 9, 10, 11]) mf.unitStatus[b] = 'denied';
-    useAppStore.getState().openImage(mf, { type: 'card', uid: mf.uid }, { standardKeysOnly: true });
+    openCardDoc(mf, { standardKeysOnly: true });
     useAppStore.setState({ reader: reader(card(UID_MF, 'MIFARE_CLASSIC_1K')) });
     let html = render(BackupView);
     expect(html).toContain('標準の鍵だけを試しました');
@@ -145,5 +147,29 @@ describe('D9 / R-UX-4: automatic reading tries only the standard keys (said wher
     openCardDoc(blankImage('NTAG215', UID_NTAG));
     const html = render(BackupView);
     expect(html).toContain('00 にして保存します');
+  });
+});
+
+describe('D15: the backup screen keeps its own source (never another screen\'s document)', () => {
+  it('a document open in the binary editor (with edits) is not the backup source; the backup source is not the editor\'s', () => {
+    const img = blankImage('NTAG215', UID_NTAG);
+    useAppStore.getState().openImage(img, { type: 'card', uid: img.uid });
+    const edited = new Uint8Array(img.data);
+    edited.set([1, 2, 3, 4], 16);
+    useAppStore.getState().editDocData(edited);
+    useAppStore.setState({ reader: reader(card(UID_NTAG, 'NTAG215')) });
+    let html = render(BackupView);
+    // The entry (nothing read here yet), not the editor's document.
+    expect(html).toContain(translate('ja', 'backup.noDoc.title'));
+    expect(html).not.toContain('data-testid="backup-source"');
+
+    openCardDoc(blankImage('NTAG215', '04112233445566'));
+    html = render(BackupView);
+    expect(html).toContain('data-testid="backup-source"');
+    expect(html).toContain('04:11:22:33:44:55:66');
+    // The binary editor's document (and its edit) is untouched.
+    const st = useAppStore.getState();
+    expect(st.doc?.image.uid).toBe(UID_NTAG);
+    expect(st.doc?.image.data.slice(16, 20)).toEqual(new Uint8Array([1, 2, 3, 4]));
   });
 });

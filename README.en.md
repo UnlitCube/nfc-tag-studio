@@ -20,6 +20,8 @@ A Windows desktop app to **read, edit, write, back up and batch-issue** the NFC 
 | NDEF editor | URL, text, Wi-Fi, contact (vCard), Android app (AAR), MIME, external and smart poster records, with a capacity meter |
 | Binary editor | Byte-by-byte editing per page/block with colour-coded areas, bit explanations, structure boundaries, counters and a guided settings editor |
 | Backup & duplicate | Save to `.nfcdump`, `.bin` or Flipper `.nfc` and write back to the same or another tag (data area only; the UID is never copied) |
+| Erase | Empty the NDEF or erase the whole data area (the UID, locks, settings, password and keys do not change; the tag is re-read right before erasing and another tag is never written) |
+| Factory reset | Put the data, settings, password and MIFARE keys and access conditions back to the factory state (advanced mode; what physically cannot go back, such as lock bits, is not written and the reason is shown) |
 | Batch issue | Write sequence numbers, CSV rows, NDEF or a backup to one tag after another, with skipping of issued tags, verification, resume and an issue log (CSV) |
 | Data schema | Lay out where and how an ID is written and save it as `.nfcschema` |
 | MIFARE keys | Register the keys you operate (masked on screen, encrypted with Windows DPAPI). Public default keys are included |

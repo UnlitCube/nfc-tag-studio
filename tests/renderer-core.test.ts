@@ -344,6 +344,36 @@ describe('writeWithConfirm', () => {
     expect(lw.lines.join('')).not.toContain('単位');
   });
 
+  it('D15: a write from a screen\'s own document words the confirmation by it, never re-reads and never touches the binary editor\'s document', async () => {
+    openEdited(ntagImage(), [5]); // the binary editor: tag A with an unsaved edit
+    const editorBefore = useAppStore.getState().doc!;
+    // The backup screen's source is tag B; it is copied onto tag A.
+    useAppStore.getState().openPageDoc('backup', ntagImage(UID_B, 0x33), { type: 'card', uid: UID_B });
+    useAppStore.setState({ view: 'backup' });
+    const req: WriteRequest = { kind: 'NTAG213', expectedUid: UID_A, writes: [page(6, 0x33, 0x33, 0x33, 0x33)], allowProtected: false, verify: true };
+    handlers.writeTag = () => result(req);
+    handlers.readTag = () => {
+      throw new Error('must not re-read');
+    };
+    expect(await ops.writeWithConfirm(req, { ...UI, doc: 'backup', docCopy: true, target: { kind: 'NTAG213', uid: UID_A, other: true } })).not.toBeNull();
+    // "copy of tag B" (the backup source), not of the editor's tag A.
+    expect(seenDialogs[0].warning).toContain('04:B0:B1:B2:B3:B4:B5');
+    expect(calls.readTag).toBeUndefined();
+    const st = useAppStore.getState();
+    expect(st.doc).toBe(editorBefore);
+    expect(dirtyUnits(st.doc)).toEqual([5]);
+    expect(st.pageDocs.backup?.image.uid).toBe(UID_B);
+    expect(st.lastWrite!.view).toBe('backup');
+
+    // No document at all (erase / full reset): no "copy" warning, the editor untouched.
+    seenDialogs.length = 0;
+    useAppStore.setState({ view: 'erase' });
+    expect(await ops.writeWithConfirm(req, { ...UI, doc: null, docCopy: false, target: { kind: 'NTAG213', uid: UID_A, other: false } })).not.toBeNull();
+    expect(seenDialogs[0].warning).toBeUndefined();
+    expect(useAppStore.getState().doc).toBe(editorBefore);
+    expect(useAppStore.getState().lastWrite!.view).toBe('erase');
+  });
+
   it('partial failure keeps the unwritten edits pending and says which page and why (WRITE-4 / FLOW-7)', async () => {
     openEdited(ntagImage(), [5, 6]);
     const req = writesOfDoc();
@@ -614,6 +644,11 @@ describe('autoReadDecision', () => {
 // ---------------------------------------------------------------------------
 
 describe('TagOnReader / LastWriteCallout render', () => {
+  // D15: TagOnReader / LastWriteCallout look at the visible screen's own document; these use the binary editor's.
+  beforeEach(() => {
+    useAppStore.setState({ view: 'hex' });
+  });
+
   async function renderWith(component: 'tag' | 'tagCompact' | 'last'): Promise<string> {
     const { createElement } = await import('react');
     const { renderToStaticMarkup } = await import('react-dom/server');
@@ -1087,6 +1122,11 @@ describe('D9 / R-UX-4: the auto-read tries the public standard keys only', () =>
 });
 
 describe('TagOnReader readThis / keys, LastWriteCallout relation (E2E-UX-3, D9, R-WRITE-5)', () => {
+  // D15: TagOnReader / LastWriteCallout look at the visible screen's own document; these use the binary editor's.
+  beforeEach(() => {
+    useAppStore.setState({ view: 'hex' });
+  });
+
   async function render(component: 'tag' | 'last', props: Record<string, unknown> = {}): Promise<string> {
     const { createElement } = await import('react');
     const { renderToStaticMarkup } = await import('react-dom/server');
@@ -1151,6 +1191,25 @@ describe('TagOnReader readThis / keys, LastWriteCallout relation (E2E-UX-3, D9, 
     useAppStore.getState().openImage(ntagImage(UID_B), { type: 'card', uid: UID_B });
     useAppStore.setState({ reader: readerWith('ready', UID_B), lastWrite: failed });
     expect(await render('last')).not.toContain('もう一度書き込んでください');
+  });
+
+  it('D15: a write result is shown only on the screen that wrote it; "the document" is that screen\'s own', async () => {
+    useAppStore.getState().openImage(ntagImage(UID_A), { type: 'card', uid: UID_A });
+    useAppStore.setState({ reader: readerWith('absent'), lastWrite: { ...ok(UID_B), view: 'backup' } });
+    expect(await render('last')).toBe(''); // on the binary editor: not its result
+    useAppStore.setState({ view: 'backup' });
+    // On the backup screen: shown; its own source is UID_B, so it is "this document's" result.
+    useAppStore.getState().openPageDoc('backup', ntagImage(UID_B), { type: 'card', uid: UID_B });
+    const html = await render('last');
+    expect(html).toContain('データ領域を複製しました');
+    expect(html).not.toContain('data-related');
+    // Without its own source, a result for a tag not on the reader is "another tag" (the editor's UID_A does not count).
+    useAppStore.getState().closePageDoc('backup');
+    useAppStore.setState({ lastWrite: { ...ok(UID_A), view: 'backup' } });
+    expect(await render('last')).toContain('data-related="false"');
+    // A result without a screen (older callers) is shown everywhere.
+    useAppStore.setState({ view: 'ndef', lastWrite: ok(UID_A) });
+    expect(await render('last')).toContain('データ領域を複製しました');
   });
 
   it('isStaleWriteResult: a success for another tag goes once a different tag is placed; failures stay', async () => {

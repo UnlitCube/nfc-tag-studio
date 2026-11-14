@@ -12,7 +12,10 @@ test('E2 読み取り → 1 バイト編集 → タグに書き込む → 未書
   const { app, page } = nfc;
   const uid = await startWithReadTag(page, 'NTAG215');
 
+  // D15: the tag read on the home screen is not carried over; the binary editor reads it itself.
   const hex = await nav(page, 'hex');
+  await expect(hex.getByTestId('hex-docbar')).toHaveCount(0);
+  await hex.getByTestId('hex-read').click();
   await expect(hex.getByTestId('hex-docbar')).toContainText(t('hex.doc.clean'));
   await expect(page.getByTestId('nav-dirty')).toHaveCount(0);
 

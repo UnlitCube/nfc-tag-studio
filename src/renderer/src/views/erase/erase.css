@@ -1,0 +1,53 @@
+/* Erase screen. Colours and sizes only through tokens (styles/tokens.css). */
+.erase-entry {
+  margin-top: var(--space-3);
+  align-items: center;
+}
+
+.erase-modes {
+  display: grid;
+  gap: var(--space-3);
+}
+
+.erase-mode {
+  display: flex;
+  gap: var(--space-3);
+  align-items: flex-start;
+  padding: var(--space-3) var(--space-4);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  background: var(--surface);
+  cursor: pointer;
+}
+
+.erase-mode.is-selected {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+}
+
+.erase-mode input {
+  margin-top: 4px;
+  accent-color: var(--accent);
+}
+
+.erase-mode-text {
+  display: grid;
+  gap: var(--space-1);
+}
+
+.erase-run {
+  display: grid;
+  gap: var(--space-3);
+}
+
+.erase-run .grow {
+  flex: 1 1 auto;
+}
+
+/* Lists of what is reset / what cannot be (erase and factory reset screens). */
+.erase-list {
+  margin: 0;
+  padding-left: 1.25em;
+  display: grid;
+  gap: var(--space-1);
+}

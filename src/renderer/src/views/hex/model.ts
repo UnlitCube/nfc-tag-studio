@@ -679,8 +679,20 @@ export function initializeImage(kind: TagKind, data: Uint8Array, mode: InitMode 
   const size = spec.unitSize;
   if (isNtag(kind)) {
     const us = spec.userStartUnit * size;
-    next.fill(0, us, us + spec.userBytes);
-    next.set([0x03, 0x00, 0xfe], us);
+    // Keep the Lock / Memory Control TLVs at the start of the user memory: they describe the
+    // tag's lock bytes, not data, and are part of the factory content (a real NTAG213 ships
+    // with 01 03 A0 0C 34 before the empty NDEF - Sony PaSoRi, 2026-11-14). Erasing them
+    // would not be "back to the factory content".
+    let keep = 0;
+    while (keep + 2 <= spec.userBytes) {
+      const type = data[us + keep];
+      if (type !== 0x01 && type !== 0x02) break;
+      const len = data[us + keep + 1];
+      if (len === 0xff || keep + 2 + len + 3 > spec.userBytes) break;
+      keep += 2 + len;
+    }
+    next.fill(0, us + keep, us + spec.userBytes);
+    next.set([0x03, 0x00, 0xfe], us + keep);
     return next;
   }
   if (isFelica(kind)) {

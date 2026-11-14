@@ -390,10 +390,18 @@ export function ntagBcc(uid: Uint8Array): [number, number] {
   return [0x88 ^ uid[0] ^ uid[1] ^ uid[2], uid[3] ^ uid[4] ^ uid[5] ^ uid[6]];
 }
 
+/** The first bytes of the user memory (page 4 on) of an NTAG21x as delivered; the rest is 00. */
+export function ntagFactoryUserStart(kind: TagKind): number[] {
+  return kind === 'NTAG213' ? [0x01, 0x03, 0xa0, 0x0c, 0x34, 0x03, 0x00, 0xfe] : [0x03, 0x00, 0xfe];
+}
+
 /**
  * Factory-fresh memory image.
  * NTAG21x: UID+BCC, internal 0x48, static lock 00 00, CC E1 10 <size> 00,
- *   empty NDEF TLV 03 00 FE in page 4, dynamic lock 00, CFG0 04 00 00 FF,
+ *   user memory: NTAG213 = Lock Control TLV 01 03 A0 0C 34 + empty NDEF 03 00 FE
+ *   (as delivered - read from a real NTAG213 on a Sony PaSoRi, 2026-11-13/14),
+ *   NTAG215 / NTAG216 = empty NDEF 03 00 FE (data sheet; not checked on a real tag),
+ *   dynamic lock 00, CFG0 04 00 00 FF,
  *   CFG1 00 05 00 00, PWD FF FF FF FF (reads as 00), PACK 00 00.
  * MIFARE Classic: block 0 = UID + BCC + SAK + ATQA + manufacturer bytes,
  *   data blocks 00, trailers FFFFFFFFFFFF FF0780 69 FFFFFFFFFFFF.
@@ -420,7 +428,7 @@ export function factoryImage(kind: TagKind, uid: Uint8Array): Uint8Array {
     data.set([uid[0], uid[1], uid[2], bcc0, uid[3], uid[4], uid[5], uid[6], bcc1, 0x48, 0x00, 0x00], 0);
     const ccSize = kind === 'NTAG213' ? 0x12 : kind === 'NTAG215' ? 0x3e : 0x6d;
     data.set([0xe1, 0x10, ccSize, 0x00], 12);
-    data.set([0x03, 0x00, 0xfe], 16);
+    data.set(ntagFactoryUserStart(kind), 16);
     const p = ntagConfigPagesFor(spec.userBytes);
     data.set([0x04, 0x00, 0x00, 0xff], p.cfg0 * 4);
     data.set([0x00, 0x05, 0x00, 0x00], p.cfg1 * 4);

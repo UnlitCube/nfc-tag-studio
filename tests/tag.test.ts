@@ -190,7 +190,7 @@ describe('planWrites', () => {
   it('orders the NTAG password group PWD, PACK, CFG1, CFG0 after user pages', () => {
     const base = blankImage('NTAG213', NTAG_UID);
     const edited = new Uint8Array(base.data);
-    edited[4 * 4] = 0x01; // user page 4
+    edited[4 * 4] = 0x7e; // user page 4 (the factory NTAG213 already has 01 there: Lock Control TLV)
     edited[41 * 4 + 3] = 0x10; // CFG0
     edited[42 * 4] = 0x80; // CFG1
     edited.set([0xaa, 0xbb, 0xcc, 0xdd], 43 * 4); // PWD

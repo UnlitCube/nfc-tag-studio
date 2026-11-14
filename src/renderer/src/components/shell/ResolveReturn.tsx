@@ -10,7 +10,7 @@
 //   testids: resolve-return (data-reason), resolve-back, resolve-back-read.
 import { ArrowLeft, ScanLine } from 'lucide-react';
 import { Button } from '../ui';
-import { useAppStore } from '../../store/app';
+import { useAppStore, docOwnerOf } from '../../store/app';
 import type { ViewId } from '../../store/app';
 import { useT } from '../../i18n';
 import type { MsgKey } from '../../i18n';
@@ -58,7 +58,8 @@ export function ResolveReturn({ view, compact = false }: { view: ViewId; compact
             onClick={() => {
               setView(returnTo);
               // Manual read: tries every registered key (D9), unlike the automatic read.
-              void readCurrentTag();
+              // D15: into the document of the screen it returns to.
+              void readCurrentTag({}, { into: docOwnerOf(returnTo) ?? 'hex' });
             }}
             data-testid="resolve-back-read"
           >

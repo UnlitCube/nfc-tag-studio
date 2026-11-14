@@ -11,7 +11,7 @@ import path from 'node:path';
 import type { Page } from '@playwright/test';
 import { isNtag, ntagPages, specFor } from '../../src/shared/tags';
 import type { ReaderStatus } from '../../src/shared/types';
-import { bridge, confirmTarget, containsUtf8, dialog, editByte, formatUid, nav, pageBytes, stubOpenDialog, stubSaveDialog, view } from '../e2e/helpers';
+import { bridge, confirmTarget, containsUtf8, dialog, editByte, formatUid, nav, openFromHome, pageBytes, stubOpenDialog, stubSaveDialog, view } from '../e2e/helpers';
 import { t } from '../e2e/i18n';
 import { HW_OUT, expect, normUid, test, type HwApp } from './launch-hw';
 
@@ -95,7 +95,8 @@ test('HW 実機の NTAG: バイナリ編集・NDEF・バックアップから戻
 
   try {
     await test.step('バイナリ編集: 2 バイト変えて書き込む → 読み直して一致', async () => {
-      const hex = await nav(page, 'hex');
+      // D15: the home screen's read goes to the binary editor only with "Open in binary editor".
+      const hex = await openFromHome(page, 'hex');
       await expect(hex.getByTestId('hex-docbar')).toContainText(t('hex.doc.clean'));
       const a = 10 * 4;
       const b = userLast * 4;
@@ -125,6 +126,9 @@ test('HW 実機の NTAG: バイナリ編集・NDEF・バックアップから戻
 
     await test.step('NDEF: URL を書き込む → ホームで 1 件 → 読み直しても出る', async () => {
       const ndef = await nav(page, 'ndef');
+      // D15: the NDEF editor reads the tag itself.
+      await ndef.getByTestId('ndef-read-tag').click();
+      await expect(ndef.getByTestId('ndef-write')).toBeVisible();
       // Remove what the tag had (this tag may carry records from an earlier run).
       for (let i = await ndef.locator('.ndef-record').count(); i > 0; i--) {
         await ndef.locator('.ndef-record').first().getByRole('button', { name: t('ndef.remove'), exact: true }).click();
@@ -142,7 +146,10 @@ test('HW 実機の NTAG: バイナリ編集・NDEF・バックアップから戻
       await hwShot(page, 'HW-02-ndef-written');
       expect(containsUtf8((await readReal(hw)).data, 'example.com/hw-test')).toBe(true);
 
+      // The home screen keeps its own (earlier) read until it reads again (D15).
       const h = await nav(page, 'home');
+      await h.getByTestId('home-read').click();
+      await expect(dialog(page)).toHaveCount(0);
       await expect(h.getByTestId('home-doc-body')).toContainText(t('home.doc.ndefRecords', { n: 1 }));
       const n = await nav(page, 'ndef');
       await n.getByTestId('ndef-read-tag').click();
@@ -152,7 +159,9 @@ test('HW 実機の NTAG: バイナリ編集・NDEF・バックアップから戻
     });
 
     await test.step('バックアップ: 保存 → タグが変わる → 読んだ文書から戻す・保存したファイルから戻す', async () => {
-      const backup = await nav(page, 'backup');
+      // D15: the home screen's read (just above) as the backup source - a one-way copy.
+      await nav(page, 'home');
+      const backup = await openFromHome(page, 'backup');
       await expect(backup.getByTestId('backup-source')).toBeVisible();
       const file = path.join(hw.dir, 'hw-backup.nfcdump');
       await stubSaveDialog(app, file);

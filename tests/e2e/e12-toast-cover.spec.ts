@@ -12,6 +12,7 @@ test('E12 読み取り直後のトーストが「タグに書き込む」を覆�
   const { page } = nfc;
   await startWithReadTag(page, 'NTAG215');
   const hex = await nav(page, 'hex');
+  await hex.getByTestId('hex-read').click(); // D15: the binary editor reads the tag itself
   await editByte(page, 40, 'A5');
   await hex.getByTestId('hex-docbar').getByRole('button', { name: t('hex.doc.read'), exact: true }).click();
   await page.getByTestId('confirm-ok').click(); // discard -> read again -> "read" toast

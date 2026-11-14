@@ -11,6 +11,8 @@ export type HelpTopicId =
   | 'ndef'
   | 'hex'
   | 'backup'
+  | 'erase'
+  | 'factory'
   | 'issue'
   | 'schema'
   | 'log'
@@ -28,6 +30,8 @@ export const HELP_TOPICS: HelpTopicId[] = [
   'ndef',
   'hex',
   'backup',
+  'erase',
+  'factory',
   'issue',
   'schema',
   'log',
@@ -79,6 +83,8 @@ const JA: Record<HelpTopicId, HelpBlock[]> = {
         '「NDEF 編集」（URL・テキストなど）か「バイナリ編集」（メモリを 1 バイトずつ）で内容を編集し、その画面の［タグに書き込む］で書き込みます。',
         'ファイルに残すときは、「バイナリ編集」の［ファイルに保存…］か「バックアップ・複製」の画面で保存します。保存したファイルは、「読み取り」画面の［ファイルを開く…］で開けます。',
         '同じ内容や連番を何枚にも書くときは、「一括発行」を使います。',
+        '編集をやめるときは、画面の下の［キャンセル］（未書き込みの変更が無いときは［閉じる］）を押します。読み取る前の画面に戻ります。',
+        '読み取ったタグや開いたファイルは、画面ごとに持ちます。ほかの画面で読み取ったタグは引き継ぎません。「読み取り」画面で読んだタグをほかの画面で使うときは、［NDEF 編集で開く］［バイナリ編集で開く］［バックアップ・複製で開く］を押します（押したときの内容を写します）。画面を移っても、それぞれの画面の作業中の内容は残ります。',
       ],
     },
     {
@@ -94,8 +100,8 @@ const JA: Record<HelpTopicId, HelpBlock[]> = {
     {
       list: [
         '「リーダーの上のタグ」は、いまリーダーに置かれているタグの状態です（置いてください・確認中・タグを検出しました・対応していない種類・読み取れません）。',
-        '「開いている文書」は、読み取ったタグやファイルから開いた内容です。リーダーからタグを離しても残ります。',
-        '新しいタグを置くと、自動で読み取ります。ただし、未書き込みの変更がある文書や、ファイルから開いた文書は、自動では置き換えません（「開いている文書とは別のタグです」と出るので、［このタグを読み取る］を押します）。',
+        '「開いている文書」は、この画面で読み取ったタグや、ファイルから開いた内容です。リーダーからタグを離しても残ります。ほかの画面には引き継ぎません。NDEF 編集・バイナリ編集・バックアップで使うときは、［NDEF 編集で開く］［バイナリ編集で開く］［バックアップ・複製で開く］を押します。',
+        '新しいタグを置くと、見ている画面（読み取り・NDEF 編集・バイナリ編集）で自動で読み取ります。ただし、未書き込みの変更がある文書や、ファイルから開いた文書は、自動では置き換えません（「開いている文書とは別のタグです」と出るので、［このタグを読み取る］を押します）。',
         'パスワードや鍵が必要な領域は「鍵かパスワードが必要で読めなかった」、通信が途切れて読めなかった領域は「読み取れなかった」と分けて表示します。読み取れなかったときは、タグを置き直して読み取り直してください。',
         'MIFARE Classic は、自動読み取りでは公開されている標準の鍵だけを試します。登録した鍵で開くセクタは、［タグを読み取る］などを押して読み取るか、「鍵かパスワードが必要で読めなかった」の欄の［登録した鍵で読み取る］で読めます。',
         '自動読み取りは、「設定」の「タグを置いたら自動で読み取る」でオフにできます。',
@@ -126,12 +132,14 @@ const JA: Record<HelpTopicId, HelpBlock[]> = {
     },
     {
       list: [
-        '上の帯で、何を編集するか（読み取ったタグ・ファイル・新規）を選びます: ［タグを読み取る］［ファイルを開く…］［新規作成…］［ファイルに保存…］［閉じる］。下の帯の［タグに書き込む］で、リーダーの上のタグに書き込みます。',
+        '読み取る前は、編集の表は出ません。［タグを読み取る］［ファイルを開く…］［空のタグを新規作成］のどれかで始めます。上の帯で、何を編集するか（読み取ったタグ・ファイル・新規）を切り替えます: ［タグを読み取る］［ファイルを開く…］［新規作成…］［ファイルに保存…］。',
+        '下の帯の［タグに書き込む］で、リーダーの上のタグに書き込みます。そのすぐ左の［キャンセル］（未書き込みの変更があるとき）／［閉じる］で、読み取る前の画面に戻ります。',
         '［タグに書き込む］は、変更したページ・ブロックだけを書き込みます。書き込む前に、書き込み先のタグ（種類と UID）を確認に出します。',
         '読み取ったタグと別のタグ、ファイル、新規の文書から書き込むと「複製」になります。そのときは書き込み先のタグを先に読み取り、その中身との違いだけを書き込みます。',
         'パスワードで保護した NTAG は、［パスワードを入力］でパスワードを入れてから、読み取り・書き込みをします。パスワードはアプリに保存しません。パスワード認証は ACR122U などのリーダーでだけ使えます（Sony PaSoRi などのストレージ方式のリーダーでは、パスワード欄は使えません）。',
         'ロック済みのページは編集できません。CC・ロック・設定・パスワード・トレーラなどの保護領域は、上級者モードで「保護領域も編集して書き込む」をオンにしたときだけ編集できます。',
         '画面を移っても、未書き込みの変更は残ります。左のメニューの「バイナリ編集」に印が付き、画面の下の状態表示に変更の数が出ます。',
+        'ほかの画面で読み取ったタグは、この画面には入りません。「読み取り」画面で読んだタグを編集するときは、［バイナリ編集で開く］を押します。',
       ],
     },
     {
@@ -146,11 +154,37 @@ const JA: Record<HelpTopicId, HelpBlock[]> = {
       list: [
         'バックアップを元のタグに書き戻すときは［このタグに戻す］、別のタグに書くときは複製を使います。',
         '複製で書き込まれるのはデータ領域だけで、UID は複製されません。',
+        'バックアップ元は、この画面の［タグを読み取る］［ファイルを開く］か、「読み取り」画面の［バックアップ・複製で開く］で決めます。ほかの画面で開いている文書は使いません。バイナリ編集で編集した内容をファイルに残すときは、バイナリ編集の［ファイルに保存…］を使います。',
         '保存したファイルは、「読み取り」画面の［ファイルを開く…］でも開けます。',
         '何枚にも続けて複製するときは、「一括発行」を使います。',
       ],
     },
     { note: { tone: 'info', text: 'バックアップのファイルには、鍵とパスワードを入れません（MIFARE の鍵 A・鍵として使う設定の鍵 B と、NTAG のパスワード（PWD・PACK）は 00 にして保存します）。鍵 B を読める設定のセクタでは、鍵 B は鍵として使えないただのデータなので、そのまま残ります。' } },
+  ],
+  erase: [
+    { body: ['「消去」では、タグに書き込まれた NDEF やデータを消します。UID（製造番号）・ロック・設定・パスワード・MIFARE の鍵とアクセス条件は変わりません。'] },
+    {
+      list: [
+        '消去するタグをリーダーの上に置いて、［タグを読み取る］を押します（この画面では、置いただけでは読み取りません）。',
+        'いまの中身を確かめて、消去する範囲を選びます。「NDEF を空にする」は、スマートフォンで読める内容だけを消します。「データ領域をすべて消す」は、ユーザー領域を空にして空の NDEF だけを残します（NTAG は工場出荷時に近い状態。MIFARE Classic は読み取れたセクタのデータブロック、FeliCa Lite-S は S_PAD0〜S_PAD13）。',
+        '［消去する］を押すと、確認に消去するタグ（種類と UID）が出ます。消去の直前にタグを読み取り直し、別のタグや中身が変わったタグには書き込みません。',
+        '消去した後は、読み戻して照合します。結果は画面の下に残ります。［閉じる］で、読み取る前の画面に戻ります。',
+      ],
+    },
+    { note: { tone: 'warn', text: '消した内容は元に戻せません。大切なタグは、先に「バックアップ・複製」で保存してください。ロックされたページや、鍵が無く読めなかったセクタは消去できません。' } },
+  ],
+  factory: [
+    { body: ['「完全初期化」では、タグを工場出荷時の状態に戻します。データだけでなく、設定（パスワード保護・NFC カウンタなど）・パスワード・MIFARE の鍵とアクセス条件・FeliCa の MC も、工場出荷時の値に書き換えます。UID は変わりません。'] },
+    {
+      list: [
+        '設定・パスワード・鍵も書き換えるので、「設定」で上級者モードをオンにしたときだけ実行できます（読み取って、戻すものを確かめることはいつでもできます）。',
+        '初期化するタグをリーダーの上に置いて、［タグを読み取る］を押します（この画面では、置いただけでは読み取りません）。',
+        '「工場出荷時に戻すもの」と「戻せないもの」を確かめます。ロックビット・恒久ロック（CFGLCK）・FeliCa の書込保護など、物理的に戻せないものは書き換えず、理由を出します。',
+        '［初期化する］を押すと、確認に初期化するタグ（種類と UID）が出ます。「初期化」と入力してから実行します。直前にタグを読み取り直し、別のタグや中身が変わったタグには書き込みません。',
+        'パスワードで保護されたタグは、保護を外してからでないと初期化できません（Sony PaSoRi などのストレージ方式のリーダーでは、パスワード認証ができません）。',
+      ],
+    },
+    { note: { tone: 'danger', text: '運用していたパスワードや鍵では管理できなくなり、元に戻せません。大切なタグは、先に「バックアップ・複製」で保存してください。' } },
   ],
   issue: [
     { body: ['「一括発行」では、タグを 1 枚ずつリーダーの上に置き換えながら、同じスキーマや NDEF・連番・CSV の値を書き込みます。'] },
@@ -347,6 +381,8 @@ const EN: Record<HelpTopicId, HelpBlock[]> = {
         'Edit the contents in the NDEF editor (URL, text, …) or the binary editor (memory, byte by byte), then press "Write to tag" on that screen.',
         'To keep a copy as a file, use "Save to file…" in the binary editor or the Backup & duplicate screen. Saved files can be opened with "Open file…" on the Read screen.',
         'To write the same content or sequence numbers to many tags, use Batch issue.',
+        'To stop editing, press "Cancel" at the bottom of the screen ("Close" when there are no unsaved changes). You go back to the start of the screen.',
+        'Each screen keeps its own tag read or file opened; a tag read on another screen is not carried over. To use a tag read on the Read screen elsewhere, press "Open in NDEF editor", "Open in binary editor" or "Open in backup & duplicate" (it copies what is there at that moment). Switching screens keeps the work in progress on each screen.',
       ],
     },
     {
@@ -362,8 +398,8 @@ const EN: Record<HelpTopicId, HelpBlock[]> = {
     {
       list: [
         '"Tag on the reader" is the live state of the tag on the reader (place a tag, checking, tag detected, unsupported type, cannot read).',
-        '"Open document" is what was read from a tag or opened from a file. It stays when the tag is taken off the reader.',
-        'A newly placed tag is read automatically, except when the open document has unsaved changes or was opened from a file ("This is not the open document\'s tag" is shown; press "Read this tag").',
+        '"Open document" is what was read from a tag or opened from a file on this screen. It stays when the tag is taken off the reader. It is not carried over to other screens: to use it in the NDEF editor, the binary editor or Backup, press "Open in NDEF editor", "Open in binary editor" or "Open in backup & duplicate".',
+        'A newly placed tag is read automatically on the screen you are looking at (Read, NDEF editor, binary editor), except when the open document has unsaved changes or was opened from a file ("This is not the open document\'s tag" is shown; press "Read this tag").',
         'Areas that need a password or key are reported separately from areas that could not be read because communication dropped. For the latter, re-place the tag and read it again.',
         'For MIFARE Classic, automatic reading tries only the public standard keys. Sectors that a registered key opens are read when you press "Read tag" (or similar), or "Read with registered keys" next to "Needs a key or password, not read".',
         'Automatic reading can be turned off in Settings ("Read a tag automatically when it is placed").',
@@ -390,12 +426,14 @@ const EN: Record<HelpTopicId, HelpBlock[]> = {
     },
     {
       list: [
-        'The bar at the top chooses what you edit (a tag that was read, a file or a new document): "Read tag", "Open file…", "New…", "Save to file…", "Close". "Write to tag" in the bar at the bottom writes to the tag on the reader.',
+        'Before anything is read, the grid is not shown: start with "Read tag", "Open file…" or "Create a new blank tag". The bar at the top switches what you edit (a tag that was read, a file or a new document): "Read tag", "Open file…", "New…", "Save to file…".',
+        '"Write to tag" in the bar at the bottom writes to the tag on the reader. Right next to it, "Cancel" (with unsaved changes) or "Close" takes you back to the start of the screen.',
         '"Write to tag" writes only the changed pages / blocks. Before writing, the confirmation shows the target tag (type and UID).',
         'Writing a document of another tag, a file or a new document is a "copy": the target tag is read first and only what differs from it is written.',
         'For a password-protected NTAG, enter it with "Enter password" before reading or writing. The password is never stored by the app. Password auth works only with readers such as the ACR122U (a storage-only reader such as a Sony PaSoRi cannot use the password field).',
         'Locked pages cannot be edited. Protected areas (CC, locks, configuration, password, trailers) can be edited only with "Edit and write protected areas too" in advanced mode.',
         'Unsaved changes stay when you switch screens. The "Binary editor" item in the left menu gets a mark and the status bar at the bottom shows how many changes there are.',
+        'A tag read on another screen does not come into this screen. To edit a tag read on the Read screen, press "Open in binary editor".',
       ],
     },
     { heading: 'Edit sequence / number', body: ['Treat a selected byte range as a number and +1 / −1 it, add a custom step, or set a value — handy for adjusting a counter by hand.'] },
@@ -407,11 +445,37 @@ const EN: Record<HelpTopicId, HelpBlock[]> = {
       list: [
         'To write a backup back to the tag it came from, use "Restore this tag"; to write it to another tag, duplicate it.',
         'Only the data area is written; the UID is never duplicated.',
+        'The backup source is set on this screen ("Read tag", "Open file") or with "Open in backup & duplicate" on the Read screen. The document open on another screen is not used. To keep edits made in the binary editor as a file, use "Save to file…" in the binary editor.',
         'Saved files can also be opened with "Open file…" on the Read screen.',
         'To duplicate to many tags in a row, use Batch issue.',
       ],
     },
     { note: { tone: 'info', text: 'Backup files never contain keys or passwords: MIFARE key A, key B where it is used as a key, and the NTAG password (PWD, PACK) are saved as 00. In sectors set so that key B can be read, key B cannot be used as a key; it is plain data and is kept.' } },
+  ],
+  erase: [
+    { body: ['"Erase" removes the NDEF or data written on a tag. The UID (serial number), lock bits, settings, password and MIFARE keys and access conditions do not change.'] },
+    {
+      list: [
+        'Place the tag to erase on the reader and press "Read tag" (placing a tag alone does not read it on this screen).',
+        'Check what the tag holds and choose what to erase. "Empty the NDEF" removes only what phones read. "Erase the whole data area" clears the user memory and leaves only an empty NDEF (NTAG: close to the factory state; MIFARE Classic: the data blocks of the sectors that were read; FeliCa Lite-S: S_PAD0 to S_PAD13).',
+        'Press "Erase": the confirmation names the tag (type and UID). The tag is read again right before erasing; another tag, or a tag whose content changed, is not written.',
+        'After erasing, the tag is read back and compared. The result stays at the bottom. "Close" takes you back to the start of the screen.',
+      ],
+    },
+    { note: { tone: 'warn', text: 'Erased content cannot be restored. Save important tags first under "Backup & duplicate". Locked pages and sectors that could not be read without a key cannot be erased.' } },
+  ],
+  factory: [
+    { body: ['"Factory reset" puts a tag back to the state it was delivered in: the data, and also the settings (password protection, NFC counter, ...), the password, MIFARE keys and access conditions and the FeliCa MC are overwritten with the factory values. The UID does not change.'] },
+    {
+      list: [
+        'Because settings, password and keys are rewritten, it runs only with advanced mode on (Settings). Reading the tag and checking what would be reset is always possible.',
+        'Place the tag on the reader and press "Read tag" (placing a tag alone does not read it on this screen).',
+        'Check "Goes back to the factory state" and "Cannot go back". What physically cannot go back - lock bits, CFGLCK, FeliCa write protection - is not written, and the reason is shown.',
+        'Press "Reset": the confirmation names the tag (type and UID) and asks you to type "reset". The tag is read again right before; another tag, or a tag whose content changed, is not written.',
+        'A password-protected tag must have its protection removed first (storage-type readers such as the Sony PaSoRi cannot authenticate).',
+      ],
+    },
+    { note: { tone: 'danger', text: 'The password and keys you used no longer manage the tag, and this cannot be undone. Save important tags first under "Backup & duplicate".' } },
   ],
   issue: [
     { body: ['Batch issue writes the same schema or NDEF, sequence numbers or CSV values while you place tags on the reader one after another.'] },

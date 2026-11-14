@@ -6,7 +6,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import type { ElectronApplication, Locator, Page } from '@playwright/test';
 import { expect, test } from '../e2e/launch';
-import { clearToasts, dialog, nav, startWithReadTag, view } from '../e2e/helpers';
+import { clearToasts, dialog, nav, openFromHome, startWithReadTag } from '../e2e/helpers';
 import { interpolate } from '../../src/renderer/src/i18n/define';
 import common from '../../src/renderer/src/i18n/common';
 import shell from '../../src/renderer/src/i18n/shell';
@@ -51,6 +51,7 @@ async function addRecord(lang: Lang, ndef: Locator, kind: 'ndef.kind.uri' | 'nde
 async function prepareTag(lang: Lang, page: Page): Promise<void> {
   await startWithReadTag(page, 'NTAG215');
   const ndef = await nav(page, 'ndef');
+  await ndef.getByTestId('ndef-start-new').click(); // D15: the NDEF editor starts at its entry
   const uri = await addRecord(lang, ndef, 'ndef.kind.uri');
   await uri.locator('input').first().fill(SAMPLE[lang].url);
   const text = await addRecord(lang, ndef, 'ndef.kind.text');
@@ -80,14 +81,34 @@ for (const lang of ['ja', 'en'] as const) {
       await expect(ndef.locator('.ndef-record')).toHaveCount(2);
       await capture(page, lang, 'ndef');
 
-      await nav(page, 'hex');
-      await expect(view(page, 'hex').getByTestId('hex-grid')).toBeVisible();
+      // D15: each screen reads for itself.
+      const hex = await nav(page, 'hex');
+      await hex.getByTestId('hex-read').click();
+      await expect(hex.getByTestId('hex-grid')).toBeVisible();
       await capture(page, lang, 'hex');
 
-      for (const id of ['issue', 'backup', 'schema', 'keys', 'settings'] as const) {
+      // Backup: the home screen's read as the source ("Open in backup & duplicate", a one-way copy).
+      await nav(page, 'home');
+      const bk = await openFromHome(page, 'backup');
+      await expect(bk.getByTestId('backup-source')).toBeVisible();
+      await capture(page, lang, 'backup');
+
+      for (const id of ['issue', 'schema', 'keys', 'settings'] as const) {
         await nav(page, id);
         await capture(page, lang, id);
       }
+
+      // Erase: read the tag first (the screen never reads by itself), then the ranges.
+      const erase = await nav(page, 'erase');
+      await erase.getByTestId('erase-read').click();
+      await expect(erase.getByTestId('erase-tag')).toBeVisible();
+      await capture(page, lang, 'erase');
+
+      // Full reset: read first; without advanced mode the plan is shown but not run.
+      const factory = await nav(page, 'factory');
+      await factory.getByTestId('factory-read').click();
+      await expect(factory.getByTestId('factory-restore')).toBeVisible();
+      await capture(page, lang, 'factory');
     });
   });
 }

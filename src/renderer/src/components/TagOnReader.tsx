@@ -25,7 +25,7 @@ import { CircleAlert, KeyRound, Loader2, Nfc, RotateCw, ScanLine, ToggleLeft, Un
 import type { LucideIcon } from 'lucide-react';
 import { errorMessage } from '@shared/errorMessages';
 import { isMifare } from '@shared/tags';
-import { useAppStore } from '../store/app';
+import { docOf, docOwnerOf, useAppStore } from '../store/app';
 import type { TagDoc } from '../store/app';
 import { api } from '../lib/api';
 import { activeReaderInfo, tagOpBlock, type TagOpBlock } from '../lib/readerState';
@@ -69,7 +69,12 @@ export function TagOnReader({ compact = false, readThis = true }: { compact?: bo
   const t = useT();
   const reader = useAppStore((s) => s.reader);
   const lang = useAppStore((s) => s.settings.language);
-  const doc = useAppStore((s) => s.doc);
+  // D15: the document of the screen on show (each screen has its own; none on erase / factory reset / issue).
+  const owner = useAppStore((s) => docOwnerOf(s.view));
+  const doc = useAppStore((s) => {
+    const o = docOwnerOf(s.view);
+    return o ? docOf(s, o) : null;
+  });
   const issueRunning = useAppStore((s) => s.issue.running);
   const busyOp = useAppStore((s) => s.busyOp);
   const saveSettings = useAppStore((s) => s.saveSettings);
@@ -150,7 +155,7 @@ export function TagOnReader({ compact = false, readThis = true }: { compact?: bo
   ) : null;
   const readThisButton =
     otherTag && readThis ? (
-      <Button size="sm" icon={ScanLine} disabled={readBlock !== null} onClick={() => void readCurrentTag()}>
+      <Button size="sm" icon={ScanLine} disabled={readBlock !== null} onClick={() => void readCurrentTag({}, { into: owner ?? 'hex' })}>
         {t('reader.readThis')}
       </Button>
     ) : null;
@@ -161,7 +166,7 @@ export function TagOnReader({ compact = false, readThis = true }: { compact?: bo
       icon={KeyRound}
       disabled={readBlock !== null}
       title={compact ? t('reader.keysHint') : undefined}
-      onClick={() => void readCurrentTag()}
+      onClick={() => void readCurrentTag({}, { into: owner ?? 'hex' })}
       data-testid="tag-on-reader-read-keys"
     >
       {t('reader.readWithKeys')}

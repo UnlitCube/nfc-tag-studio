@@ -31,8 +31,6 @@ export default defineMessages({
     'backup.source.fromNew': '新規の文書',
     'backup.source.note': 'メモ',
     'backup.source.savedAt': '保存日時',
-    'backup.source.dirty': '未書き込みの変更',
-    'backup.source.dirtyValue': '{count}（タグにもファイルにも、まだ保存していません）',
     'backup.warn.error':
       '{count}は読み取りが途中で途切れたため、内容が 0 になっています。タグをリーダーの上に置いたまま、読み取り直してください。',
     'backup.warn.denied': '{count}は保護されていて読めなかったため、内容が 0 になっています（パスワードまたは鍵が必要です）。',
@@ -45,15 +43,8 @@ export default defineMessages({
 
     // --- Save to file ---
     'backup.save.title': 'ファイルに保存（バックアップ）',
-    'backup.save.body': '開いている文書の内容をファイルに保存します。タグには何も書き込みません。鍵とパスワードはファイルに入れません（00 にして保存します）。',
+    'backup.save.body': 'バックアップ元の内容をファイルに保存します。タグには何も書き込みません。鍵とパスワードはファイルに入れません（00 にして保存します）。',
     'backup.save.keyBNote': 'MIFARE Classic で鍵 B を読める設定のセクタでは、鍵 B は鍵として使われない、ただのデータです。そのため、そのまま保存します。',
-    'backup.save.dirtyTitle': '未書き込みの変更があります（{count}）',
-    'backup.save.dirtyBody': '開いている文書には、まだタグに書き込んでいない変更があります。どちらの内容を保存するか選んでください。',
-    'backup.save.choice': '保存する内容',
-    'backup.save.choice.originalCard': '読み取ったときの内容（タグと同じ）',
-    'backup.save.choice.originalFile': '開いたときの内容（ファイルと同じ）',
-    'backup.save.choice.originalNew': '作ったときの内容',
-    'backup.save.choice.image': '編集後の内容（未書き込みの変更を含む）',
     'backup.save.deniedFormats': 'ダンプ（.nfcdump）には「読めなかった」ことも記録されます。.bin と Flipper 形式には記録されません。',
     'backup.save.note': 'メモ（任意）',
     'backup.save.noteHint': 'ダンプ（.nfcdump）に保存されます。.bin と Flipper 形式には残りません。',
@@ -67,8 +58,8 @@ export default defineMessages({
     'backup.save.button': 'この形式で保存',
     'backup.saved': 'ファイルに保存しました',
     'backup.savedAs': '保存先: {name}（{when}）',
-    'backup.savedChanged': '保存した後に、開いている文書が変わっています。',
-    'backup.savedRedacted': '{count}にあった鍵・パスワードは、00 にして保存しました（開いている文書はそのままです）。',
+    'backup.savedChanged': '保存した後に、バックアップ元が変わっています。',
+    'backup.savedRedacted': '{count}にあった鍵・パスワードは、00 にして保存しました（バックアップ元はそのままです）。',
     'backup.reveal': 'フォルダを開く',
 
     // --- Open ---
@@ -104,7 +95,6 @@ export default defineMessages({
     'backup.plan.sourceUnread': 'バックアップ元の {count} は読めていないため、書き込みません。',
     'backup.plan.targetUnread':
       '書き込み先の {count} は保護されていて読めないため、書き込みません。MIFARE Classic なら「MIFARE 鍵」に鍵を登録してから読み取り直してください。',
-    'backup.plan.dirty': '未書き込みの変更（{count}）を含む、開いている文書の内容を書き込みます。',
     'backup.restore.button': 'このタグに戻す',
     'backup.dup.button': 'このタグに複製する',
     'backup.restore.confirmTitle': 'タグをバックアップの内容に戻しますか？',
@@ -188,8 +178,6 @@ export default defineMessages({
     'backup.source.fromNew': 'New document',
     'backup.source.note': 'Note',
     'backup.source.savedAt': 'Saved at',
-    'backup.source.dirty': 'Unsaved changes',
-    'backup.source.dirtyValue': '{count} (not yet written to a tag or saved to a file)',
     'backup.warn.error': '{count} were cut off while reading and hold zeros. Keep the tag on the reader and read it again.',
     'backup.warn.denied': '{count} are protected and could not be read, so they hold zeros (a password or key is required).',
     'backup.warn.deniedMifare':
@@ -201,16 +189,9 @@ export default defineMessages({
 
     // --- Save to file ---
     'backup.save.title': 'Save to a file (backup)',
-    'backup.save.body': 'Save the open document to a file. Nothing is written to a tag. Keys and passwords are not put in the file (they are saved as 00).',
+    'backup.save.body': 'Save the backup source to a file. Nothing is written to a tag. Keys and passwords are not put in the file (they are saved as 00).',
     'backup.save.keyBNote':
       'MIFARE Classic: in sectors set so that key B can be read, key B cannot be used as a key. It is plain data and is saved as it is.',
-    'backup.save.dirtyTitle': 'There are unsaved changes ({count})',
-    'backup.save.dirtyBody': 'The open document has changes not yet written to the tag. Choose which contents to save.',
-    'backup.save.choice': 'Contents to save',
-    'backup.save.choice.originalCard': 'As read (same as the tag)',
-    'backup.save.choice.originalFile': 'As opened (same as the file)',
-    'backup.save.choice.originalNew': 'As created',
-    'backup.save.choice.image': 'As edited (incl. unsaved changes)',
     'backup.save.deniedFormats': 'A dump (.nfcdump) also records what could not be read; .bin and Flipper files do not.',
     'backup.save.note': 'Note (optional)',
     'backup.save.noteHint': 'Stored in a dump (.nfcdump). Not kept in .bin or Flipper files.',
@@ -224,8 +205,8 @@ export default defineMessages({
     'backup.save.button': 'Save in this format',
     'backup.saved': 'Saved to a file',
     'backup.savedAs': 'Saved as: {name} ({when})',
-    'backup.savedChanged': 'The open document has changed since it was saved.',
-    'backup.savedRedacted': 'The keys and passwords in {count} were saved as 00 (the open document is unchanged).',
+    'backup.savedChanged': 'The backup source has changed since it was saved.',
+    'backup.savedRedacted': 'The keys and passwords in {count} were saved as 00 (the backup source is unchanged).',
     'backup.reveal': 'Show in folder',
 
     // --- Open ---
@@ -260,7 +241,6 @@ export default defineMessages({
     'backup.plan.sourceUnread': '{count} of the backup source were not read and are not written.',
     'backup.plan.targetUnread':
       '{count} of the tag to write are protected and could not be read, so they are not written. For MIFARE Classic, register the key under "MIFARE keys" and read the tag again.',
-    'backup.plan.dirty': 'The open document is written including its unsaved changes ({count}).',
     'backup.restore.button': 'Restore this tag',
     'backup.dup.button': 'Copy to this tag',
     'backup.restore.confirmTitle': 'Restore the tag from the backup',

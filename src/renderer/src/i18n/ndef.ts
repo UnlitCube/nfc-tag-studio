@@ -43,6 +43,13 @@ export default defineMessages({
     'ndef.saveFile': 'NDEF ファイルに保存',
     'ndef.filter': 'NDEF メッセージ',
     'ndef.startNew': '新規に作る',
+    // D14: 読み取る前（入口）。レコードの編集欄は、読み取り・ファイル・新規作成のあとにだけ出す。
+    'ndef.entry.title': '編集する NDEF がありません',
+    'ndef.entry.body': 'タグを読み取るか、NDEF ファイルを開くか、新しく作ってください。レコードの編集は、そのあとで始まります。',
+    'ndef.exit.title': '編集をやめますか？',
+    'ndef.exit.body': '組み立て中の {n} 件のレコードは、タグにもファイルにも保存されていません。捨てて、読み取る前の画面に戻ります。',
+    'ndef.exit.ok': '捨てて戻る',
+    'ndef.exit.keep': '編集を続ける',
 
     'ndef.pending.title': '開いている文書が変わりました',
     'ndef.pending.body': '開いている文書（{what}）の NDEF は、編集中のレコードがあるため取り込んでいません。',
@@ -255,6 +262,12 @@ export default defineMessages({
     'ndef.saveFile': 'Save to NDEF file',
     'ndef.filter': 'NDEF message',
     'ndef.startNew': 'Start new',
+    'ndef.entry.title': 'No NDEF to edit',
+    'ndef.entry.body': 'Read a tag, open an NDEF file or start new. Editing the records begins after that.',
+    'ndef.exit.title': 'Stop editing?',
+    'ndef.exit.body': 'The {n} record(s) being composed are not saved to a tag or a file. They are discarded and you go back to the start of this screen.',
+    'ndef.exit.ok': 'Discard and go back',
+    'ndef.exit.keep': 'Keep editing',
 
     'ndef.pending.title': 'The open document changed',
     'ndef.pending.body': 'The NDEF of the open document ({what}) was not taken over because you are editing records.',

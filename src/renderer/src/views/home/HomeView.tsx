@@ -90,15 +90,14 @@ const FAMILY_KEY: Record<Exclude<CardFamily, null>, MsgKey> = {
 export function HomeView() {
   const t = useT();
   const reader = useAppStore((s) => s.reader);
-  const doc = useAppStore((s) => s.doc);
+  // D15: this screen's own read result (never the binary editor's or another screen's).
+  const doc = useAppStore((s) => s.pageDocs.home);
   const busyOp = useAppStore((s) => s.busyOp);
   const issueRunning = useAppStore((s) => s.issue.running);
-  const setView = useAppStore((s) => s.setView);
   const toast = useAppStore((s) => s.toast);
   const toastError = useAppStore((s) => s.toastError);
-  const openImage = useAppStore((s) => s.openImage);
-  const closeDoc = useAppStore((s) => s.closeDoc);
-  const guardDiscard = useAppStore((s) => s.guardDiscard);
+  const openPageDoc = useAppStore((s) => s.openPageDoc);
+  const closePageDoc = useAppStore((s) => s.closePageDoc);
   const actions = useReaderActions();
 
   const [localReading, setLocalReading] = useState(false);
@@ -116,14 +115,13 @@ export function HomeView() {
   async function onRead() {
     setLocalReading(true);
     try {
-      await readCurrentTag();
+      await readCurrentTag({}, { into: 'home' });
     } finally {
       setLocalReading(false);
     }
   }
 
   async function onOpenFile() {
-    if (!(await guardDiscard())) return;
     setOpening(true);
     try {
       const res = await api.openFile({ title: t('home.openFile.title'), filters: dumpOpenFilters(t) });
@@ -135,9 +133,8 @@ export function HomeView() {
         toast({ tone: 'danger', title: t('home.openFile.failed'), detail: t('file.openFailed.body', { name: res.name }) });
         return;
       }
-      openImage(parsed.image, { type: 'file', name: res.name, token: res.token, format: parsed.format });
+      openPageDoc('home', parsed.image, { type: 'file', name: res.name, token: res.token, format: parsed.format });
       toast({ tone: 'ok', title: t('home.openFile.opened', { name: res.name }), detail: parsed.note ? t('home.openFile.note', { note: parsed.note }) : undefined });
-      setView('hex');
     } catch (err) {
       toastError(err);
     } finally {
@@ -145,8 +142,8 @@ export function HomeView() {
     }
   }
 
-  async function onCloseDoc() {
-    if (await guardDiscard()) closeDoc();
+  function onCloseDoc() {
+    closePageDoc('home');
   }
 
   async function startTrial() {
@@ -554,7 +551,7 @@ function DeniedHint({ kind }: { kind: TagKind }) {
       setReading(true);
       try {
         // A manual read tries every registered key (D9).
-        await readCurrentTag();
+        await readCurrentTag({}, { into: 'home' });
       } finally {
         setReading(false);
       }
@@ -587,11 +584,29 @@ function DeniedHint({ kind }: { kind: TagKind }) {
 
 function DocPanel({ opening, onOpenFile, onCloseDoc }: { opening: boolean; onOpenFile: () => void; onCloseDoc: () => void }) {
   const t = useT();
-  const doc = useAppStore((s) => s.doc);
+  const doc = useAppStore((s) => s.pageDocs.home);
   const reader = useAppStore((s) => s.reader);
   const lang = useAppStore((s) => s.settings.language);
   const setView = useAppStore((s) => s.setView);
   const busyOp = useAppStore((s) => s.busyOp);
+  const openImage = useAppStore((s) => s.openImage);
+  const openPageDoc = useAppStore((s) => s.openPageDoc);
+  const guardDiscard = useAppStore((s) => s.guardDiscard);
+
+  /**
+   * D15: hand what this screen read to another screen - an explicit copy (the other
+   * screen keeps its own document otherwise). The binary editor asks first when its
+   * own document has unsaved changes.
+   */
+  async function openIn(view: 'hex' | 'ndef' | 'backup') {
+    if (!doc) return;
+    const opts = doc.standardKeysOnly ? { standardKeysOnly: true } : undefined;
+    if (view === 'hex') {
+      if (!(await guardDiscard())) return;
+      openImage(doc.original, doc.source, opts);
+    } else openPageDoc(view, doc.original, doc.source, opts);
+    setView(view);
+  }
 
   const openButton = (
     <Button icon={FolderOpen} onClick={onOpenFile} loading={opening} disabled={busyOp !== null} data-testid="home-open-file">
@@ -629,21 +644,10 @@ function DocPanel({ opening, onOpenFile, onCloseDoc }: { opening: boolean; onOpe
       t('home.doc.ndef'),
       <span key="ndef" className="stack-tight">
         <span>{ndef}</span>
-        {s.dirty > 0 ? <span className="small muted">{t('home.doc.ndefOriginal')}</span> : null}
       </span>,
     ]);
   }
   if (s.counter != null) items.push([t('home.doc.counter'), String(s.counter)]);
-  items.push([
-    t('home.doc.unsaved'),
-    s.dirty > 0 ? (
-      <Badge key="dirty" tone="warn">
-        {t(pages ? 'home.doc.unsavedPages' : 'home.doc.unsavedBlocks', { n: s.dirty })}
-      </Badge>
-    ) : (
-      t('home.doc.unsavedNone')
-    ),
-  ]);
   if (s.onReader !== 'not-applicable') {
     const where =
       s.onReader === 'on-reader' ? t('home.doc.onReader.on') : s.onReader === 'other-tag' ? t('home.doc.onReader.other') : t('home.doc.onReader.none');
@@ -665,15 +669,15 @@ function DocPanel({ opening, onOpenFile, onCloseDoc }: { opening: boolean; onOpe
       {s.unread > 0 ? <Callout tone="warn">{t(pages ? 'home.doc.unreadPages' : 'home.doc.unreadBlocks', { n: s.unread })}</Callout> : null}
       {!s.ndefApplicable ? <p className="small muted">{t('home.doc.felicaNote')}</p> : null}
       <div className="row home-doc-actions">
-        <Button icon={Binary} onClick={() => setView('hex')} data-testid="home-to-hex">
+        <Button icon={Binary} onClick={() => void openIn('hex')} disabled={busyOp !== null} data-testid="home-to-hex">
           {t('home.doc.toHex')}
         </Button>
         {s.ndefApplicable ? (
-          <Button icon={FileCode2} onClick={() => setView('ndef')} data-testid="home-to-ndef">
+          <Button icon={FileCode2} onClick={() => void openIn('ndef')} disabled={busyOp !== null} data-testid="home-to-ndef">
             {t('home.doc.toNdef')}
           </Button>
         ) : null}
-        <Button icon={Archive} onClick={() => setView('backup')} data-testid="home-to-backup">
+        <Button icon={Archive} onClick={() => void openIn('backup')} disabled={busyOp !== null} data-testid="home-to-backup">
           {t('home.doc.toBackup')}
         </Button>
       </div>

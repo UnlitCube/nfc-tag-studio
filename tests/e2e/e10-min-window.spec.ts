@@ -14,6 +14,7 @@ test('E10 最小の窓（1000x680）でもバイナリ編集の「タグに書�
 
   await startWithReadTag(page, 'NTAG215');
   const hex = await nav(page, 'hex');
+  await hex.getByTestId('hex-read').click(); // D15: the binary editor reads the tag itself
   const write = hex.getByTestId('hex-write');
   await expect(write).toBeVisible();
   await expect(write).toBeInViewport({ ratio: 1 });

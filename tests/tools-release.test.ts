@@ -20,8 +20,9 @@ const read = (p: string) => fs.readFileSync(path.join(ROOT, p), 'utf8');
 const pkg = JSON.parse(read('package.json'));
 
 describe('CHANGELOG の切り出し（tools/changelog-section.mjs）', () => {
-  it('いまの CHANGELOG から、package.json の版の節を Release の条件（## vNext が空）で切り出せる', () => {
-    const r = changelogSection(read('CHANGELOG.md'), pkg.version, { requireEmptyNext: true });
+  // ## vNext が空であることはリリースのときだけの条件（release.yml の --release が見る）。ふだんは項目が積まれている。
+  it('いまの CHANGELOG から、package.json の版の節を切り出せる', () => {
+    const r = changelogSection(read('CHANGELOG.md'), pkg.version);
     expect(r.problems).toEqual([]);
     expect(r.body).toContain('###');
     expect(r.body.length).toBeGreaterThan(200);

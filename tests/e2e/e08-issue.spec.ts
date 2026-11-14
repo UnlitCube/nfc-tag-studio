@@ -22,6 +22,8 @@ test('E8 一括発行: 置いたまま開始 → いったん離して → 結�
 
   // --- template: one text record with the sequence number, from the NDEF editor ---------
   const ndef = await nav(page, 'ndef');
+  // D15: the NDEF editor starts at its entry (the home screen's read is not carried over): start a new set.
+  await ndef.getByTestId('ndef-start-new').click();
   await ndef.getByRole('button', { name: t('ndef.add'), exact: true }).click();
   await ndef.getByRole('menuitem', { name: t('ndef.kind.text'), exact: true }).click();
   await ndef.locator('.ndef-record').first().locator('textarea').fill('No.{{seq}}');

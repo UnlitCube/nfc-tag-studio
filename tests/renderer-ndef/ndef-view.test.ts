@@ -61,9 +61,13 @@ describe('NdefView: one "read this tag" in the "tag to write" card (E2E-UX-3)', 
     useAppStore.getState().openImage(blankImage('NTAG215', UID_A), { type: 'card', uid: UID_A });
     useAppStore.setState({ reader: reader(card(UID_B, 'NTAG215')) });
     const html = render();
-    expect(html).toContain('data-testid="ndef-write"');
-    // The view's own button appears only once the records' origin is known (an
-    // effect, not run on the server); the TagOnReader one must not appear at all.
+    // D14 (2026-11-13): the records' origin is set by an effect (not run on the
+    // server), so this is the entry: no editing controls before the records come
+    // from somewhere, and the entry's tag line adds no second read button either.
+    expect(html).toContain('data-testid="ndef-entry"');
+    expect(html).not.toContain('data-testid="ndef-write"');
+    expect(html).not.toContain('ndef-record');
+    expect(html).toContain('data-testid="ndef-read-tag"');
     expect(html).not.toContain(`>${translate('ja', 'reader.readThis')}<`);
   });
 });

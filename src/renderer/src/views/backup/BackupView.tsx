@@ -1,7 +1,7 @@
 // Backup / restore / duplicate view. Owner: agent renderer-backup.
 //
 // Reads as three cards, top to bottom (no step numbers - business-app-ux):
-//   "Backup source"  - the open document: read a tag / open a file
+//   "Backup source"  - this screen's own document (D15): read a tag / open a file
 //   "Save to a file" - write the source to .nfcdump / .bin / .nfc
 //   "Write to a tag" - read the tag to write, then restore (same UID) or duplicate
 //                      (another tag; only the data area, never the UID - I1/I2)
@@ -14,8 +14,7 @@
 //  - Reading the tag to write gives the same toast + sound as any read.
 //  - The write is planned from the tag to write, read again right before writing,
 //    and only differing data units are written (D5).
-//  - Saving says what is saved: with unwritten changes, the operator picks "as
-//    read" (default) or "as edited". Unreadable (error / denied) units are warned.
+//  - Unreadable (error / denied) units are warned before saving.
 //  - An opened .nfcdump keeps its note and save time (shown; saved again).
 //  - Results: the file name + "Show in folder"; write results stay on screen
 //    (LastWriteCallout); open failures are localized.
@@ -35,12 +34,19 @@
 //  - The confirmation's button says what it does (restore / copy); the "busy"
 //    reason is not shown behind an open confirmation; no toast for a save (the
 //    saved result stays on screen).
+//
+// 2026-11-14 D15 (each screen keeps its own document): the source is
+// store.pageDocs.backup - read here, opened from a file here, or copied from the
+// home screen ("Open in backup"). It is never edited here, and the binary editor's
+// document (with its edits) is neither read nor replaced. Edits are saved from the
+// binary editor ("Save to file"), so the "as read / as edited" choice is gone.
 import { useEffect, useMemo, useState } from 'react';
 import { ArrowRight, Copy, Download, FolderOpen, Lock, Nfc, RotateCcw, Save, ShieldCheck, Tag } from 'lucide-react';
-import { Badge, Button, Callout, Card, EmptyState, Field, KeyValue, Page, PageHeader, Segmented, TextInput } from '../../components/ui';
+import { Badge, Button, Callout, Card, EmptyState, Field, KeyValue, Page, PageHeader, TextInput } from '../../components/ui';
+import { ExitButton } from '../../components/ExitButton';
 import { TagOnReader, useOpBlockText } from '../../components/TagOnReader';
 import { LastWriteCallout } from '../../components/LastWriteCallout';
-import { dirtyUnits, useAppStore } from '../../store/app';
+import { useAppStore } from '../../store/app';
 import type { TagDoc } from '../../store/app';
 import { api } from '../../lib/api';
 import { readCurrentTag, readTarget, writeWithConfirm } from '../../lib/ops';
@@ -60,7 +66,6 @@ import { dumpOpenFilters, localDumpFilter } from '../../lib/fileFilters';
 import type { SaveFormat, SavedSnapshot } from './saveDump';
 
 type BusyKind = null | 'read' | 'open' | 'save' | 'target' | 'write';
-type SaveChoice = 'original' | 'image';
 
 function countText(t: TFunc, kind: TagKind, n: number): string {
   return t(specFor(kind).unit === 'page' ? 'backup.n.pages' : 'backup.n.blocks', { n });
@@ -96,16 +101,17 @@ function UnreadWarnings({ img, t, standardKeysOnly = false }: { img: TagImage; t
 export function BackupView() {
   const t = useT();
   const lang = useAppStore((s) => s.settings.language);
-  const doc = useAppStore((s) => s.doc);
+  /** D15: this screen's own document (never the binary editor's). */
+  const doc = useAppStore((s) => s.pageDocs.backup);
   const reader = useAppStore((s) => s.reader);
   const busyOp = useAppStore((s) => s.busyOp);
   const issueRunning = useAppStore((s) => s.issue.running);
-  const openImage = useAppStore((s) => s.openImage);
+  const openPageDoc = useAppStore((s) => s.openPageDoc);
+  const closePageDoc = useAppStore((s) => s.closePageDoc);
   const toast = useAppStore((s) => s.toast);
   const toastError = useAppStore((s) => s.toastError);
   const handoffTo = useAppStore((s) => s.handoffTo);
   const confirm = useAppStore((s) => s.confirm);
-  const guardDiscard = useAppStore((s) => s.guardDiscard);
   /** A confirmation is open: the "busy" reason behind it would be premature (E2E-UX-4). */
   const dialogOpen = useAppStore((s) => s.dialogs.length > 0);
   const opText = useOpBlockText();
@@ -119,7 +125,6 @@ export function BackupView() {
   const [lastSaved, setLastSaved] = useState<{ token: string; name: string; at: number; snap: SavedSnapshot; kind: TagKind; redacted: number } | null>(
     null,
   );
-  const [saveChoice, setSaveChoice] = useState<SaveChoice>('original');
   const [busy, setBusy] = useState<BusyKind>(null);
 
   useEffect(() => {
@@ -139,7 +144,6 @@ export function BackupView() {
   // read / write (store.busyOp) or batch issue runs - that mixed two documents.
   const openLocked = locked || busyOp !== null || issueRunning;
   const card = isCardReady(reader) ? reader!.card! : null;
-  const dirty = useMemo(() => dirtyUnits(doc), [doc]);
   const openedMeta = doc && doc.source.type === 'file' && opened && doc.source.token === opened.token ? opened : null;
   const sourceLabel = doc ? sourceLabelOf(t, doc, lang) : '';
   const plan = useMemo(() => (doc && target ? planRestore(doc.image, target) : null), [doc, target]);
@@ -177,10 +181,9 @@ export function BackupView() {
     }
     setBusy('read');
     try {
-      const img = await readCurrentTag({});
+      const img = await readCurrentTag({}, { into: 'backup' });
       // The new source cannot also be the tag to write.
       if (img && target && target.uid.toUpperCase() === img.uid.toUpperCase()) setTarget(null);
-      if (img) setSaveChoice('original');
     } finally {
       setBusy(null);
     }
@@ -211,14 +214,12 @@ export function BackupView() {
         beep('error');
         return;
       }
-      if (!(await guardDiscard())) return;
-      if (openInterrupted()) return;
-      openImage(imported.image, { type: 'file', name: file.name, token: file.token, format });
+      // D15: replaces only this screen's source (never edited here: nothing to lose).
+      openPageDoc('backup', imported.image, { type: 'file', name: file.name, token: file.token, format });
       const meta = format === 'project' ? readDumpMeta(file.bytes) : null;
       setOpened({ token: file.token, name: file.name, note: imported.note, savedAt: meta?.savedAt ?? null });
       // FLOW-15: keep the note of the backup (saving again keeps it).
       setNote(imported.note);
-      setSaveChoice('original');
       toast({
         tone: 'ok',
         title: t('backup.opened'),
@@ -231,9 +232,23 @@ export function BackupView() {
     }
   }
 
+  /**
+   * D14: back to the start of this screen (no backup source). Closes this screen's
+   * document (D15: never edited here, so nothing to ask) and forgets the tag read as
+   * the write target and the saved / opened file shown here.
+   */
+  function handleExit() {
+    if (locked) return;
+    closePageDoc('backup');
+    setTarget(null);
+    setOpened(null);
+    setNote('');
+    setLastSaved(null);
+  }
+
   // ---- save ------------------------------------------------------------------
 
-  const saveImage: TagImage | null = doc ? (dirty.length > 0 && saveChoice === 'original' ? doc.original : doc.image) : null;
+  const saveImage: TagImage | null = doc ? doc.image : null;
 
   async function handleSave(format: SaveFormat) {
     if (!doc || !saveImage) return;
@@ -302,7 +317,6 @@ export function BackupView() {
       if (p.unchanged.length > 0) details.push(t('backup.write.detailUnchanged', { count: countText(t, kind, p.unchanged.length) }));
       if (p.sourceUnread.length > 0) details.push(t('backup.plan.sourceUnread', { count: countText(t, kind, p.sourceUnread.length) }));
       if (p.targetUnread.length > 0) details.push(t('backup.plan.targetUnread', { count: countText(t, kind, p.targetUnread.length) }));
-      if (dirty.length > 0) details.push(t('backup.plan.dirty', { count: countText(t, kind, dirty.length) }));
       const req: WriteRequest = { kind, expectedUid: fresh.uid, writes: p.writes, allowProtected: false, verify: true };
       const res = await writeWithConfirm(req, {
         title: restore ? t('backup.restore.confirmTitle') : t('backup.dup.confirmTitle'),
@@ -311,10 +325,11 @@ export function BackupView() {
         confirmLabel: restore ? t('backup.restore.button') : t('backup.dup.button'),
         details,
         target: { kind, uid: fresh.uid, other: !restore },
-        // The open document is what is written (the confirmation says "copy" / "from the file").
+        // D15: this screen's source words the confirmation ("copy of tag X" / "from the file");
+        // it stays the source (the next tag is written from it too) and the binary editor's
+        // document is never touched.
+        doc: 'backup',
         docCopy: true,
-        // The backup source stays the open document (the next tag is written from it too).
-        // (Restoring the tag the document was read from marks the written pages as written.)
         refresh: false,
         keepUnitsOnFailure: [],
         successTitle: restore ? t('backup.restore.done') : t('backup.dup.done'),
@@ -348,13 +363,6 @@ export function BackupView() {
   const writeWhyText = hideBusy && writeWhy === readWhy ? null : writeWhy;
 
   // ---- render ----------------------------------------------------------------
-
-  const originalLabel =
-    doc?.source.type === 'card'
-      ? t('backup.save.choice.originalCard')
-      : doc?.source.type === 'file'
-        ? t('backup.save.choice.originalFile')
-        : t('backup.save.choice.originalNew');
 
   return (
     <Page>
@@ -417,12 +425,6 @@ export function BackupView() {
                     ...(openedMeta && openedMeta.savedAt
                       ? ([[t('backup.source.savedAt'), formatDateTime(Date.parse(openedMeta.savedAt), lang)]] as [string, string][])
                       : []),
-                    ...(dirty.length > 0
-                      ? ([[t('backup.source.dirty'), t('backup.source.dirtyValue', { count: countText(t, doc.image.kind, dirty.length) })]] as [
-                          string,
-                          string,
-                        ][])
-                      : []),
                   ]}
                 />
                 <UnreadWarnings img={doc.image} t={t} standardKeysOnly={!!doc.standardKeysOnly} />
@@ -435,23 +437,6 @@ export function BackupView() {
               <div className="stack">
                 <p className="muted">{t('backup.save.body')}</p>
                 {isMifare(doc.image.kind) ? <div className="muted small">{t('backup.save.keyBNote')}</div> : null}
-                {dirty.length > 0 ? (
-                  <Callout tone="warn" title={t('backup.save.dirtyTitle', { count: countText(t, doc.image.kind, dirty.length) })}>
-                    <div>{t('backup.save.dirtyBody')}</div>
-                    <div style={{ marginTop: 'var(--space-2)' }}>
-                      <Segmented<SaveChoice>
-                        ariaLabel={t('backup.save.choice')}
-                        value={saveChoice}
-                        onChange={setSaveChoice}
-                        options={[
-                          { value: 'original', label: originalLabel },
-                          { value: 'image', label: t('backup.save.choice.image') },
-                        ]}
-                      />
-                    </div>
-                  </Callout>
-                ) : null}
-                {saveImage && saveImage !== doc.image ? <UnreadWarnings img={saveImage} t={t} standardKeysOnly={!!doc.standardKeysOnly} /> : null}
                 {saveImage && unitStatusCounts(saveImage).ok < saveImage.unitStatus.length ? (
                   <div className="muted small">{t('backup.save.deniedFormats')}</div>
                 ) : null}
@@ -566,9 +551,6 @@ export function BackupView() {
                         {plan.targetUnread.length > 0 ? (
                           <Callout tone="warn">{t('backup.plan.targetUnread', { count: countText(t, target.kind, plan.targetUnread.length) })}</Callout>
                         ) : null}
-                        {dirty.length > 0 && plan.writes.length > 0 ? (
-                          <Callout tone="info">{t('backup.plan.dirty', { count: countText(t, target.kind, dirty.length) })}</Callout>
-                        ) : null}
                       </>
                     )}
                   </div>
@@ -576,10 +558,12 @@ export function BackupView() {
 
                 <LastWriteCallout />
 
-                <div className="row-between">
-                  <span className="muted small" data-testid="backup-write-why">
+                <div className="row">
+                  <span className="muted small grow backup-why" data-testid="backup-write-why">
                     {writeWhyText ?? ''}
                   </span>
+                  {/* D14: back to the start, right next to the main action on every tag screen. */}
+                  <ExitButton dirty={false} disabled={locked} onExit={handleExit} testId="backup-exit" />
                   <Button
                     variant="primary"
                     icon={plan?.mode === 'restore' ? RotateCcw : Copy}
@@ -598,7 +582,7 @@ export function BackupView() {
             <Card title={t('backup.many.title')} icon={ArrowRight}>
               <div className="row-between">
                 <p className="muted grow">{t('backup.many.body')}</p>
-                <Button icon={ArrowRight} disabled={locked} onClick={() => handoffTo('issue', { kind: 'issue-image' })}>
+                <Button icon={ArrowRight} disabled={locked} onClick={() => handoffTo('issue', { kind: 'issue-image', image: doc.image })}>
                   {t('backup.many.button')}
                 </Button>
               </div>

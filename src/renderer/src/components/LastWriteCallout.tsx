@@ -16,9 +16,13 @@
 // only for the open document's / placed tag, worded by whether it is placed. A
 // success for another tag is cleared when a different tag is placed
 // (lib/autoRead isStaleWriteResult).
+//
+// 2026-11-14 D15 (each screen keeps its own state): the result is shown only on the
+// screen that wrote it (WriteOutcome.view), and "the open document" is that screen's
+// own document (docOf / docOwnerOf), never another screen's.
 import { RefreshCw, X } from 'lucide-react';
 import type { ReaderStatus } from '@shared/types';
-import { useAppStore } from '../store/app';
+import { docOf, docOwnerOf, useAppStore } from '../store/app';
 import type { TagDoc, WriteOutcome } from '../store/app';
 import { isCardUid } from '../lib/readerState';
 import { formatDateTime, formatUid, idName, kindLabel } from '../lib/format';
@@ -43,11 +47,17 @@ export function writeResultRelation(last: WriteOutcome, doc: TagDoc | null, read
 export function LastWriteCallout() {
   const t = useT();
   const last = useAppStore((s) => s.lastWrite);
-  const doc = useAppStore((s) => s.doc);
+  const view = useAppStore((s) => s.view);
+  const doc = useAppStore((s) => {
+    const owner = docOwnerOf(s.view);
+    return owner ? docOf(s, owner) : null;
+  });
   const reader = useAppStore((s) => s.reader);
   const setLastWrite = useAppStore((s) => s.setLastWrite);
   const lang = useAppStore((s) => s.settings.language);
   if (!last) return null;
+  // D15: another screen's write result is not shown here.
+  if (last.view && last.view !== view) return null;
   const rel = writeResultRelation(last, doc, reader);
   const id = idName(last.kind);
   const uid = last.uid ? formatUid(last.uid) : '-';

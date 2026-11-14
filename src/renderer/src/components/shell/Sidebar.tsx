@@ -1,10 +1,10 @@
 // Left navigation. Owner: agent "shell-ui".
 // Grouped by intent, in the order of the work (2026-11-12 UX audit FIRST-15):
-//   read & edit one tag (read -> NDEF / binary editor -> backup), batch issue, manage.
+//   read & edit one tag (read -> NDEF / binary editor -> backup -> erase -> factory reset), batch issue, manage.
 // Every item has a short second line and a tooltip that explain the jargon
 // (NDEF, binary, schema, MIFARE keys). data-testid="nav-<view>" is used by E2E.
 import type { LucideIcon } from 'lucide-react';
-import { Archive, BookOpen, Binary, CircleHelp, FileCode2, KeyRound, ListChecks, Nfc, ScanLine, Settings, Stamp } from 'lucide-react';
+import { Archive, BookOpen, Binary, CircleHelp, Eraser, FileCode2, KeyRound, ListChecks, Nfc, RotateCcw, ScanLine, Settings, Stamp } from 'lucide-react';
 import { useAppStore, dirtyUnits } from '../../store/app';
 import type { ViewId } from '../../store/app';
 import { useT } from '../../i18n';
@@ -25,6 +25,8 @@ export const NAV_GROUPS: NavGroup[] = [
       { id: 'ndef', icon: FileCode2 },
       { id: 'hex', icon: Binary },
       { id: 'backup', icon: Archive },
+      { id: 'erase', icon: Eraser },
+      { id: 'factory', icon: RotateCcw },
     ],
   },
   {

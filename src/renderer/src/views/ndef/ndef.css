@@ -210,3 +210,9 @@
 .ndef-why {
   text-align: right;
 }
+
+/* D14 entry (nothing read / opened yet): centred like the other entry screens. */
+.ndef-entry {
+  margin-top: var(--space-3);
+  align-items: center;
+}

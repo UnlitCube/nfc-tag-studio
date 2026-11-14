@@ -6,7 +6,7 @@
 // App calls useAutoRead() once. Owner: renderer-core.
 import { useEffect } from 'react';
 import type { ReaderStatus } from '@shared/types';
-import { isDocDirty, useAppStore } from '../store/app';
+import { docOf, docOwnerOf, isDocDirty, useAppStore } from '../store/app';
 import type { TagDoc, ViewId, WriteOutcome } from '../store/app';
 import { isCardReady } from './readerState';
 import { readCurrentTag } from './ops';
@@ -92,6 +92,7 @@ export function isStaleWriteResult(last: WriteOutcome | null, reader: ReaderStat
 export function autoReadStep(handled: string | null): string | null {
   const s = useAppStore.getState();
   if (isStaleWriteResult(s.lastWrite, s.reader)) s.setLastWrite(null);
+  const owner = docOwnerOf(s.view);
   const d = autoReadDecision({
     enabled: s.settings.autoRead !== false,
     view: s.view,
@@ -99,10 +100,11 @@ export function autoReadStep(handled: string | null): string | null {
     issueRunning: s.issue.running,
     busyOp: s.busyOp,
     dialogsOpen: s.dialogs.length > 0,
-    doc: s.doc,
+    // D15: the screen on show reads into ITS document; another screen's is never looked at.
+    doc: owner ? docOf(s, owner) : null,
     handled,
   });
-  if (d.read) void readCurrentTag({}, { standardKeysOnly: true });
+  if (d.read && owner) void readCurrentTag({}, { standardKeysOnly: true, into: owner });
   return d.handled;
 }
 

@@ -252,7 +252,6 @@ export function IssueView() {
   const storeLastRun = useAppStore((s) => s.issueLastRun);
   const recent = useAppStore((s) => s.issueRecent);
   const handoff = useAppStore((s) => s.handoff);
-  const docKind = useAppStore((s) => s.doc?.image.kind ?? null);
   const takeHandoff = useAppStore((s) => s.takeHandoff);
   const setView = useAppStore((s) => s.setView);
   const toastError = useAppStore((s) => s.toastError);
@@ -346,17 +345,17 @@ export function IssueView() {
         setNdefRecords(hn.records);
       }
     } else if (handoff.kind === 'issue-image') {
-      if (takeHandoff('issue-image')) {
+      // D15: the image comes with the handoff (the backup screen's source), never from
+      // another screen's document.
+      const hi = takeHandoff('issue-image');
+      if (hi) {
         setTemplate('image');
-        const doc = useAppStore.getState().doc;
-        if (doc) {
-          setImageSource({
-            kind: doc.image.kind,
-            data: new Uint8Array(doc.image.data),
-            uid: doc.image.uid,
-            unitStatus: [...doc.image.unitStatus],
-          });
-        }
+        setImageSource({
+          kind: hi.image.kind,
+          data: new Uint8Array(hi.image.data),
+          uid: hi.image.uid,
+          unitStatus: [...hi.image.unitStatus],
+        });
       }
     }
   }, [active, handoff, takeHandoff]);
@@ -380,7 +379,7 @@ export function IssueView() {
   }, [issue.running, toastError]);
 
   // Keep `kind` consistent with the template, and default it to the tag on the
-  // reader / the open document until the operator picks one (ISSUE-10).
+  // reader until the operator picks one (ISSUE-10; D15: not another screen's document).
   const allowedKinds: TagKind[] =
     template === 'schema' && schema && schema.tagKinds.length > 0 ? schema.tagKinds : TAG_KINDS;
   const cardKind = reader?.cardState === 'ready' ? (reader.card?.kind ?? null) : null;
@@ -390,13 +389,14 @@ export function IssueView() {
       if (imageSource && kind !== imageSource.kind) setKindState(imageSource.kind);
       return;
     }
-    const preferred = [cardKind, docKind].find((k): k is TagKind => !!k && allowedKinds.includes(k)) ?? null;
+    // D15: only the tag on the reader (another screen's document is not looked at).
+    const preferred = cardKind && allowedKinds.includes(cardKind) ? cardKind : null;
     if (!allowedKinds.includes(kind)) {
       setKindState(preferred ?? allowedKinds[0]);
       return;
     }
     if (!kindTouched.current && active && preferred && preferred !== kind) setKindState(preferred);
-  }, [template, imageSource, kind, cardKind, docKind, allowedKinds, active, issue.running]);
+  }, [template, imageSource, kind, cardKind, allowedKinds, active, issue.running]);
 
   function chooseKind(k: TagKind) {
     kindTouched.current = true;

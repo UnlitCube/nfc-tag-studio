@@ -39,7 +39,11 @@ test('E6 NDEF: 既存のレコードが出る → テキストを足して 2 件
   const uid = await startWithReadTag(page, 'NTAG215');
 
   // --- write a URL record (the tag is blank) --------------------------------
+  // D15: the NDEF editor starts at its entry (the home screen's read is not carried over) and reads the tag itself.
   let ndef = await nav(page, 'ndef');
+  await expect(ndef.getByTestId('ndef-entry')).toBeVisible();
+  await ndef.getByTestId('ndef-read-tag').click();
+  await expect(ndef.getByTestId('ndef-origin')).toBeVisible();
   await expect(ndef.locator('.ndef-record')).toHaveCount(0);
   const uri = await addRecord(ndef, 'ndef.kind.uri');
   await uri.locator('input').first().fill(URL);
@@ -47,12 +51,15 @@ test('E6 NDEF: 既存のレコードが出る → テキストを足して 2 件
   await writeNdef(page, ndef, uid, null);
   expect(containsUtf8((await readVirtualTag(app, page)).data, 'example.com/e2e')).toBe(true);
 
-  // --- home, read again, back: the record on the tag is shown ---------------------
+  // --- home reads the tag on its own; the NDEF editor keeps its records, and reading shows the record on the tag ---
   const home = await nav(page, 'home');
-  await expect(home.getByTestId('home-doc-body')).toContainText(t('home.doc.ndefRecords', { n: 1 }));
   await home.getByTestId('home-read').click();
   await expect(dialog(page)).toHaveCount(0);
+  await expect(home.getByTestId('home-doc-body')).toContainText(t('home.doc.ndefRecords', { n: 1 }));
   ndef = await nav(page, 'ndef');
+  await expect(ndef.locator('.ndef-record')).toHaveCount(1); // kept while away (D3)
+  await ndef.getByTestId('ndef-read-tag').click();
+  await expect(dialog(page)).toHaveCount(0);
   await expect(ndef.locator('.ndef-record')).toHaveCount(1);
   await expect(ndef.locator('.ndef-record').nth(0).locator('input').first()).toHaveValue(URL);
   await expect(ndef.getByTestId('ndef-origin')).not.toContainText(t('ndef.origin.edited'));

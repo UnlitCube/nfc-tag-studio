@@ -1,7 +1,7 @@
 // E5 taking the tag off while editing: "write to tag" is disabled and says why
 // (place the tag). Placing it again enables it, and the edit is still there.
 import { expect, test } from './launch';
-import { dialog, editByte, nav, readVirtualTag, shot, startWithReadTag, tap } from './helpers';
+import { dialog, editByte, openFromHome, readVirtualTag, shot, startWithReadTag, tap } from './helpers';
 import { t } from './i18n';
 
 const BYTE = 48; // page 12, byte 0
@@ -9,7 +9,7 @@ const BYTE = 48; // page 12, byte 0
 test('E5 タグを離すと書き込みボタンが押せず理由が出る → 置き直すと押せる', async ({ nfc }) => {
   const { app, page } = nfc;
   await startWithReadTag(page, 'NTAG215');
-  const hex = await nav(page, 'hex');
+  const hex = await openFromHome(page, 'hex'); // D15: a one-way copy of the home screen's tag
   await editByte(page, BYTE, '7E');
   const write = hex.getByTestId('hex-write');
   await expect(write).toBeEnabled();

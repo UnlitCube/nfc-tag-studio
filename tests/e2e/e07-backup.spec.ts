@@ -10,6 +10,7 @@ import {
   formatUid,
   nav,
   newTag,
+  openFromHome,
   pageBytes,
   readVirtualTag,
   readerStatus,
@@ -40,7 +41,8 @@ test('E7 バックアップ: 保存 → 開く → 新しいタグへ複製 → 
   expect(pageBytes(imgA.data, 10)).toEqual(P10);
 
   // --- save to a file -----------------------------------------------------------
-  const backup = await nav(page, 'backup');
+  // D15: the home screen's tag becomes the backup source only with "Open in backup & duplicate".
+  const backup = await openFromHome(page, 'backup');
   await expect(backup.getByTestId('backup-source')).toBeVisible();
   const file = path.join(dir, 'backup-a.nfcdump');
   await stubSaveDialog(app, file);
@@ -87,7 +89,7 @@ test('E7 バックアップ: 保存 → 開く → 新しいタグへ複製 → 
   // --- restore the same tag: B becomes the source, page 10 is changed on the tag, then put back ---
   await backup.getByRole('button', { name: t('backup.read'), exact: true }).first().click();
   dlg = dialog(page);
-  await expect(dlg).toBeVisible(); // the tag on the reader is not the open document: asked first
+  await expect(dlg).toBeVisible(); // the tag on the reader is not the backup source: asked first
   await expect(dlg.locator('.modal-title')).toHaveText(t('backup.reread.title'));
   await dlg.getByTestId('confirm-ok').click();
   await expect(backup.getByTestId('backup-source')).not.toContainText('backup-a.nfcdump');
@@ -111,7 +113,11 @@ test('E7 バックアップ: 保存 → 開く → 新しいタグへ複製 → 
 test('E7b 複製先のタグの横に「このタグを読み取る」が出ず、バックアップ元が黙って置き換わらない', async ({ nfc }) => {
   const { app, page, dir } = nfc;
   const uidA = await startWithReadTag(page, 'NTAG215');
-  const backup = await nav(page, 'backup');
+  // D15: the backup screen has nothing until it reads; take the home screen's tag (one-way copy).
+  let backup = await nav(page, 'backup');
+  await expect(backup.getByTestId('backup-source')).toHaveCount(0);
+  await nav(page, 'home');
+  backup = await openFromHome(page, 'backup');
   const file = path.join(dir, 'a.nfcdump');
   await stubSaveDialog(app, file);
   await backup.getByRole('button', { name: `${t('backup.save.button')}: ${t('backup.save.project')}`, exact: true }).click();

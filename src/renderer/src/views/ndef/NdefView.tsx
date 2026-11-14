@@ -26,14 +26,15 @@
 // Invariant (I1): the UID is read-only. Only the NDEF data area is written.
 import './ndef.css';
 import { useEffect, useMemo, useState } from 'react';
-import { Binary, Download, Eraser, FilePlus, FolderOpen, Nfc, PenLine, Send, Tag, Upload } from 'lucide-react';
+import { Binary, Download, Eraser, FileCode2, FilePlus, FolderOpen, Nfc, PenLine, Send, Tag, Upload } from 'lucide-react';
 import type { TagKind } from '@shared/tags';
 import { TAG_KINDS, isFelica, isMifare, isNtag, specFor } from '@shared/tags';
 import type { NdefRecordDraft } from '@shared/ndef/types';
 import { decodeToDrafts, encodeDrafts } from '@shared/ndef';
 import type { WriteRequest } from '@shared/types';
 import { FILE_FILTERS } from '@shared/api';
-import { Badge, Button, Callout, Card, Field, KeyValue, Page, PageHeader, Select } from '../../components/ui';
+import { Badge, Button, Callout, Card, EmptyState, Field, KeyValue, Page, PageHeader, Select } from '../../components/ui';
+import { ExitButton } from '../../components/ExitButton';
 import { TagOnReader, useOpBlockText } from '../../components/TagOnReader';
 import { LastWriteCallout } from '../../components/LastWriteCallout';
 import { useT } from '../../i18n';
@@ -109,7 +110,8 @@ function stateLabel(t: TFunc, state: ImageNdef['state'], count: number): string 
   }
 }
 
-function planErrorText(t: TFunc, plan: Extract<NdefWritePlan, { ok: false }>): string {
+/** Why an NDEF write cannot be planned on this tag (also used by the erase screen). */
+export function planErrorText(t: TFunc, plan: Extract<NdefWritePlan, { ok: false }>): string {
   switch (plan.reason) {
     case 'unsupported-kind':
       return t('ndef.plan.unsupported');
@@ -142,7 +144,8 @@ function existingLine(t: TFunc, existing: ImageNdef): string {
 export function NdefView() {
   const t = useT();
   const lang = useAppStore((s) => s.settings.language);
-  const doc = useAppStore((s) => s.doc);
+  // D15: this screen's own read result (a tag read here, or handed over by the read screen).
+  const doc = useAppStore((s) => s.pageDocs.ndef);
   const reader = useAppStore((s) => s.reader);
   const busyOp = useAppStore((s) => s.busyOp);
   const issueRunning = useAppStore((s) => s.issue.running);
@@ -152,6 +155,8 @@ export function NdefView() {
   const toastError = useAppStore((s) => s.toastError);
   const confirm = useAppStore((s) => s.confirm);
   const setUnsavedDraft = useAppStore((s) => s.setUnsavedDraft);
+  const closePageDoc = useAppStore((s) => s.closePageDoc);
+  const setLastWrite = useAppStore((s) => s.setLastWrite);
   const active = useViewActive();
   const opText = useOpBlockText();
 
@@ -244,8 +249,8 @@ export function NdefView() {
     if (!(await okToReplace())) return;
     setBusy('read');
     try {
-      const img = await readCurrentTag({});
-      const d = useAppStore.getState().doc;
+      const img = await readCurrentTag({}, { into: 'ndef' });
+      const d = useAppStore.getState().pageDocs.ndef;
       // readCurrentTag already said "read"; the origin card shows what the NDEF holds.
       if (img && d && d.image.uid === img.uid) takeFromDoc(d, false);
     } finally {
@@ -254,7 +259,7 @@ export function NdefView() {
   }
 
   async function takeOpenDoc() {
-    const d = useAppStore.getState().doc;
+    const d = useAppStore.getState().pageDocs.ndef;
     if (!d || !(await okToReplace())) return;
     takeFromDoc(d, true);
   }
@@ -318,6 +323,37 @@ export function NdefView() {
     } finally {
       setBusy(null);
     }
+  }
+
+  /**
+   * D14: back to the start of this screen (the entry). Asks before dropping records
+   * being composed. When the records came from the open document (a tag read) that
+   * document is closed too - "back to before reading" - unless it holds unsaved
+   * binary edits (they belong to the binary editor and stay). The same placement
+   * is not read again automatically (autoRead: one read per placement), and
+   * loadedKey keeps the closed / kept document from being taken over again.
+   */
+  async function exitEditor() {
+    if (locked) return;
+    if (edited && records.length > 0) {
+      const ok = await confirm({
+        title: t('ndef.exit.title'),
+        message: t('ndef.exit.body', { n: records.length }),
+        confirmLabel: t('ndef.exit.ok'),
+        cancelLabel: t('ndef.exit.keep'),
+        tone: 'warn',
+      });
+      if (!ok) return;
+    }
+    // The tag read on this screen goes too ("back to before reading"). Other screens keep theirs (D15).
+    if (useAppStore.getState().pageDocs.ndef) closePageDoc('ndef');
+    setRecords([]);
+    setEdited(false);
+    setOrigin({ type: 'none' });
+    setPlanIssue(null);
+    setLastSaved(null);
+    // Only this screen's own write result (D15: another screen's stays there).
+    if (useAppStore.getState().lastWrite?.view === 'ndef') setLastWrite(null);
   }
 
   function sendToIssue() {
@@ -415,20 +451,22 @@ export function NdefView() {
         target: { kind: target.kind, uid: target.uid, other },
         // NDEF records, not a copy of the open document: it is never replaced by another tag for this (R-WRITE-1).
         docCopy: false,
+        // D15: this screen's own read result words the confirmation; the binary editor's document is never touched.
+        doc: 'ndef',
+        refresh: false,
         // These are NDEF pages, not edits of the open document: nothing to keep pending.
         keepUnitsOnFailure: [],
         successTitle: erase ? t('ndef.erased') : t('ndef.written'),
       });
       const fullyOk =
         !!res && res.failed.length === 0 && !res.aborted && res.mismatched.length === 0 && res.verified !== false;
-      // Erasing: the effect takes the now empty NDEF over unless records are being edited.
-      if (!fullyOk || erase) return;
-      const now = useAppStore.getState().doc;
-      if (!(now && now.source.type === 'card' && now.image.uid.toUpperCase() === target.uid.toUpperCase())) {
-        // The open document (another tag / a file) was kept: the records are what this tag holds now.
-        setOrigin({ type: 'written', uid: target.uid, kind: target.kind, at: Date.now() });
+      if (!fullyOk) return;
+      // The records on screen are now what this tag holds (erasing: none - unless records were being composed).
+      if (erase) {
+        if (edited) return;
+        setRecords([]);
       }
-      // Otherwise the refreshed document holds exactly these records: the effect takes them over.
+      setOrigin({ type: 'written', uid: target.uid, kind: target.kind, at: Date.now() });
       setEdited(false);
     } finally {
       setBusy(null);
@@ -465,184 +503,237 @@ export function NdefView() {
         {t('ndef.uidNote')}
       </Callout>
 
-      <Card title={t('ndef.origin.title')} icon={Tag}>
-        <div className="stack">
-          <KeyValue
-            items={[
-              [
-                t('ndef.origin.label'),
-                <span key="o" data-testid="ndef-origin">
-                  {originText} {edited ? <Badge tone="warn">{t('ndef.origin.edited')}</Badge> : null}
-                </span>,
-              ],
-              ...(origin.type === 'doc'
-                ? ([[t('ndef.origin.contents'), stateLabel(t, origin.state, origin.count)]] as [string, string][])
-                : []),
-            ]}
-          />
-          {origin.type === 'doc' && origin.dirty ? <div className="muted small">{t('ndef.origin.docDirty')}</div> : null}
-          {/* D9: automatic reading tries only the standard keys; "Read from tag" tries the registered ones too. */}
-          {origin.type === 'doc' && origin.state === 'unreadable' && isMifare(origin.kind) && !!doc && loadedKey === docKey(doc) && doc.standardKeysOnly ? (
-            <div className="muted small" data-testid="ndef-mifare-keys-hint">
-              {t('ndef.origin.mifareKeysHint')}
-            </div>
-          ) : null}
-
-          {docPending && doc ? (
-            <Callout tone="info" title={t('ndef.pending.title')}>
-              <div>{t('ndef.pending.body', { what: docLabel(t, doc, lang) })}</div>
-              <div style={{ marginTop: 'var(--space-2)' }}>
-                <Button size="sm" icon={Download} onClick={() => void takeOpenDoc()} disabled={locked}>
-                  {t('ndef.pending.action')}
-                </Button>
+      {origin.type === 'none' ? (
+        <Card>
+          <div data-testid="ndef-entry">
+            <EmptyState icon={FileCode2} title={t('ndef.entry.title')}>
+              <p className="muted">{t('ndef.entry.body')}</p>
+              <div className="stack ndef-entry">
+                {/* This screen has its own "read" button right below: not a second one. */}
+                <TagOnReader readThis={false} />
+                {docIsFelica ? (
+                  <Callout tone="warn" title={t('ndef.felicaTitle')}>
+                    <div>{t('ndef.felicaBody')}</div>
+                    <div style={{ marginTop: 'var(--space-2)' }}>
+                      <Button size="sm" icon={Binary} onClick={() => setView('hex')}>
+                        {t('ndef.openHex')}
+                      </Button>
+                    </div>
+                  </Callout>
+                ) : null}
+                <div className="row">
+                  <Button
+                    variant="primary"
+                    icon={Nfc}
+                    loading={busy === 'read'}
+                    disabled={!!readWhy || locked}
+                    onClick={() => void readFromTag()}
+                    data-testid="ndef-read-tag"
+                  >
+                    {t('ndef.readTag')}
+                  </Button>
+                  {doc && supportsNdef(doc.image.kind) ? (
+                    <Button icon={Download} disabled={locked} onClick={() => void takeOpenDoc()} data-testid="ndef-import-doc">
+                      {t('ndef.importDoc')}
+                    </Button>
+                  ) : null}
+                  <Button icon={Upload} loading={busy === 'file'} disabled={locked} onClick={() => void openNdefFile()}>
+                    {t('ndef.openFile')}
+                  </Button>
+                  <Button icon={FilePlus} disabled={locked} onClick={() => void startNew()} data-testid="ndef-start-new">
+                    {t('ndef.startNew')}
+                  </Button>
+                </div>
+                {readWhy ? <div className="muted small">{readWhy}</div> : null}
+                <div className="muted small">{t('ndef.origin.hint')}</div>
               </div>
-            </Callout>
-          ) : null}
-
-          {docIsFelica ? (
-            <Callout tone="warn" title={t('ndef.felicaTitle')}>
-              <div>{t('ndef.felicaBody')}</div>
-              <div style={{ marginTop: 'var(--space-2)' }}>
-                <Button size="sm" icon={Binary} onClick={() => setView('hex')}>
-                  {t('ndef.openHex')}
-                </Button>
+            </EmptyState>
+          </div>
+        </Card>
+      ) : (
+        <>
+        <Card title={t('ndef.origin.title')} icon={Tag}>
+          <div className="stack">
+            <KeyValue
+              items={[
+                [
+                  t('ndef.origin.label'),
+                  <span key="o" data-testid="ndef-origin">
+                    {originText} {edited ? <Badge tone="warn">{t('ndef.origin.edited')}</Badge> : null}
+                  </span>,
+                ],
+                ...(origin.type === 'doc'
+                  ? ([[t('ndef.origin.contents'), stateLabel(t, origin.state, origin.count)]] as [string, string][])
+                  : []),
+              ]}
+            />
+            {origin.type === 'doc' && origin.dirty ? <div className="muted small">{t('ndef.origin.docDirty')}</div> : null}
+            {/* D9: automatic reading tries only the standard keys; "Read from tag" tries the registered ones too. */}
+            {origin.type === 'doc' && origin.state === 'unreadable' && isMifare(origin.kind) && !!doc && loadedKey === docKey(doc) && doc.standardKeysOnly ? (
+              <div className="muted small" data-testid="ndef-mifare-keys-hint">
+                {t('ndef.origin.mifareKeysHint')}
               </div>
-            </Callout>
-          ) : null}
-
-          <div className="row">
-            <Button
-              variant={records.length === 0 ? 'primary' : 'secondary'}
-              icon={Nfc}
-              loading={busy === 'read'}
-              disabled={!!readWhy || locked}
-              onClick={() => void readFromTag()}
-              data-testid="ndef-read-tag"
-            >
-              {t('ndef.readTag')}
-            </Button>
-            {doc && supportsNdef(doc.image.kind) && !docIsOrigin && !docPending ? (
-              <Button icon={Download} disabled={locked} onClick={() => void takeOpenDoc()}>
-                {t('ndef.importDoc')}
-              </Button>
             ) : null}
-            <Button icon={Upload} loading={busy === 'file'} disabled={locked} onClick={() => void openNdefFile()}>
-              {t('ndef.openFile')}
-            </Button>
-            <Button icon={FilePlus} disabled={locked} onClick={() => void startNew()}>
-              {t('ndef.startNew')}
-            </Button>
-          </div>
-          {readWhy ? <div className="muted small">{readWhy}</div> : null}
-          <div className="muted small">{t('ndef.origin.hint')}</div>
-        </div>
-      </Card>
 
-      <Card
-        title={t('ndef.records')}
-        actions={
-          <div className="row">
-            <Badge tone="accent">{t('ndef.recordsCount', { n: records.length })}</Badge>
-            <Button size="sm" icon={Download} disabled={records.length === 0 || !!preview.error || locked} onClick={() => void saveNdefFile()}>
-              {t('ndef.saveFile')}
-            </Button>
-            <Button size="sm" icon={Send} onClick={sendToIssue} disabled={records.length === 0 || locked}>
-              {t('ndef.sendToIssue')}
-            </Button>
-          </div>
-        }
-      >
-        <div className="stack">
-          {lastSaved ? (
+            {docPending && doc ? (
+              <Callout tone="info" title={t('ndef.pending.title')}>
+                <div>{t('ndef.pending.body', { what: docLabel(t, doc, lang) })}</div>
+                <div style={{ marginTop: 'var(--space-2)' }}>
+                  <Button size="sm" icon={Download} onClick={() => void takeOpenDoc()} disabled={locked}>
+                    {t('ndef.pending.action')}
+                  </Button>
+                </div>
+              </Callout>
+            ) : null}
+
+            {docIsFelica ? (
+              <Callout tone="warn" title={t('ndef.felicaTitle')}>
+                <div>{t('ndef.felicaBody')}</div>
+                <div style={{ marginTop: 'var(--space-2)' }}>
+                  <Button size="sm" icon={Binary} onClick={() => setView('hex')}>
+                    {t('ndef.openHex')}
+                  </Button>
+                </div>
+              </Callout>
+            ) : null}
+
             <div className="row">
-              <span className="muted small">{t('ndef.savedAs', { name: lastSaved.name })}</span>
-              <Button size="sm" variant="ghost" icon={FolderOpen} onClick={() => api.revealFile(lastSaved.token).catch(toastError)}>
-                {t('ndef.reveal')}
+              <Button
+                variant={records.length === 0 ? 'primary' : 'secondary'}
+                icon={Nfc}
+                loading={busy === 'read'}
+                disabled={!!readWhy || locked}
+                onClick={() => void readFromTag()}
+                data-testid="ndef-read-tag"
+              >
+                {t('ndef.readTag')}
+              </Button>
+              {doc && supportsNdef(doc.image.kind) && !docIsOrigin && !docPending ? (
+                <Button icon={Download} disabled={locked} onClick={() => void takeOpenDoc()}>
+                  {t('ndef.importDoc')}
+                </Button>
+              ) : null}
+              <Button icon={Upload} loading={busy === 'file'} disabled={locked} onClick={() => void openNdefFile()}>
+                {t('ndef.openFile')}
+              </Button>
+              <Button icon={FilePlus} disabled={locked} onClick={() => void startNew()}>
+                {t('ndef.startNew')}
               </Button>
             </div>
-          ) : null}
-          <NdefRecordsEditor records={records} onChange={editRecords} capacityKind={capacityKind} readOnly={locked} />
-          {cardKind && supportsNdef(cardKind) ? (
-            <div className="muted small">{t('ndef.capacityFromCard', { kind: kindLabel(cardKind) })}</div>
-          ) : (
-            <Field label={t('ndef.capacityKind')} hint={t('ndef.capacityKindHint')}>
-              <Select<TagKind>
-                value={newKind}
-                onChange={setNewKind}
-                options={TAG_KINDS.filter((k) => supportsNdef(k)).map((k) => ({ value: k, label: kindLabel(k) }))}
-              />
-            </Field>
-          )}
-        </div>
-      </Card>
+            {readWhy ? <div className="muted small">{readWhy}</div> : null}
+            <div className="muted small">{t('ndef.origin.hint')}</div>
+          </div>
+        </Card>
 
-      <Card title={t('ndef.preview')}>
-        <div className="stack">
-          <div className="muted small">{t('ndef.previewHint')}</div>
-          {preview.error ? (
-            <Callout tone="warn">{t('ndef.previewError')}</Callout>
-          ) : (
-            <>
-              <div>
-                <Badge tone="accent">{t('ndef.messageBytes', { n: preview.len })}</Badge>
-              </div>
-              <pre className="ndef-preview">{preview.hex}</pre>
-            </>
-          )}
-        </div>
-      </Card>
-
-      <Card title={t('ndef.target.title')} icon={PenLine}>
-        <div className="stack">
-          <div className="muted">{t('ndef.target.body')}</div>
-          {/* This card has its own "read this tag" (below, asks before replacing edited records): not a second one. */}
-          <TagOnReader compact readThis={false} />
-          {otherTag && card && originUid ? (
-            <Callout tone="info">
-              <div>{t('ndef.target.other', { a: formatUid(originUid), b: formatUid(card.uid) })}</div>
-              <div style={{ marginTop: 'var(--space-2)' }}>
-                <Button size="sm" icon={Nfc} disabled={!!readWhy || locked} onClick={() => void readFromTag()}>
-                  {t('ndef.target.readThis')}
+        <Card
+          title={t('ndef.records')}
+          actions={
+            <div className="row">
+              <Badge tone="accent">{t('ndef.recordsCount', { n: records.length })}</Badge>
+              <Button size="sm" icon={Download} disabled={records.length === 0 || !!preview.error || locked} onClick={() => void saveNdefFile()}>
+                {t('ndef.saveFile')}
+              </Button>
+              <Button size="sm" icon={Send} onClick={sendToIssue} disabled={records.length === 0 || locked}>
+                {t('ndef.sendToIssue')}
+              </Button>
+            </div>
+          }
+        >
+          <div className="stack">
+            {lastSaved ? (
+              <div className="row">
+                <span className="muted small">{t('ndef.savedAs', { name: lastSaved.name })}</span>
+                <Button size="sm" variant="ghost" icon={FolderOpen} onClick={() => api.revealFile(lastSaved.token).catch(toastError)}>
+                  {t('ndef.reveal')}
                 </Button>
               </div>
-            </Callout>
-          ) : null}
-          {cardIsFelica ? <Callout tone="warn">{t('ndef.target.felica')}</Callout> : null}
-          {showPlanIssue && planIssue ? (
-            <Callout tone="warn" title={t('ndef.plan.title')}>
-              {planIssue.text}
-            </Callout>
-          ) : null}
-          <LastWriteCallout />
-          <div className="ndef-actions">
-            <Button
-              icon={Eraser}
-              loading={busy === 'erase'}
-              disabled={!!eraseWhy || locked}
-              onClick={() => void writeToTag(true)}
-              data-testid="ndef-erase"
-            >
-              {t('ndef.erase')}
-            </Button>
-            <span className="grow" />
-            <Button
-              icon={PenLine}
-              variant="primary"
-              loading={busy === 'write'}
-              disabled={!!writeWhy || locked}
-              onClick={() => void writeToTag(false)}
-              data-testid="ndef-write"
-            >
-              {t('ndef.writeToTag')}
-            </Button>
+            ) : null}
+            <NdefRecordsEditor records={records} onChange={editRecords} capacityKind={capacityKind} readOnly={locked} />
+            {cardKind && supportsNdef(cardKind) ? (
+              <div className="muted small">{t('ndef.capacityFromCard', { kind: kindLabel(cardKind) })}</div>
+            ) : (
+              <Field label={t('ndef.capacityKind')} hint={t('ndef.capacityKindHint')}>
+                <Select<TagKind>
+                  value={newKind}
+                  onChange={setNewKind}
+                  options={TAG_KINDS.filter((k) => supportsNdef(k)).map((k) => ({ value: k, label: kindLabel(k) }))}
+                />
+              </Field>
+            )}
           </div>
-          {writeWhy ? (
-            <div className="muted small ndef-why" data-testid="ndef-write-why">
-              {writeWhy}
+        </Card>
+
+        <Card title={t('ndef.preview')}>
+          <div className="stack">
+            <div className="muted small">{t('ndef.previewHint')}</div>
+            {preview.error ? (
+              <Callout tone="warn">{t('ndef.previewError')}</Callout>
+            ) : (
+              <>
+                <div>
+                  <Badge tone="accent">{t('ndef.messageBytes', { n: preview.len })}</Badge>
+                </div>
+                <pre className="ndef-preview">{preview.hex}</pre>
+              </>
+            )}
+          </div>
+        </Card>
+
+        <Card title={t('ndef.target.title')} icon={PenLine}>
+          <div className="stack">
+            <div className="muted">{t('ndef.target.body')}</div>
+            {/* This card has its own "read this tag" (below, asks before replacing edited records): not a second one. */}
+            <TagOnReader compact readThis={false} />
+            {otherTag && card && originUid ? (
+              <Callout tone="info">
+                <div>{t('ndef.target.other', { a: formatUid(originUid), b: formatUid(card.uid) })}</div>
+                <div style={{ marginTop: 'var(--space-2)' }}>
+                  <Button size="sm" icon={Nfc} disabled={!!readWhy || locked} onClick={() => void readFromTag()}>
+                    {t('ndef.target.readThis')}
+                  </Button>
+                </div>
+              </Callout>
+            ) : null}
+            {cardIsFelica ? <Callout tone="warn">{t('ndef.target.felica')}</Callout> : null}
+            {showPlanIssue && planIssue ? (
+              <Callout tone="warn" title={t('ndef.plan.title')}>
+                {planIssue.text}
+              </Callout>
+            ) : null}
+            <LastWriteCallout />
+            <div className="ndef-actions">
+              <Button
+                icon={Eraser}
+                loading={busy === 'erase'}
+                disabled={!!eraseWhy || locked}
+                onClick={() => void writeToTag(true)}
+                data-testid="ndef-erase"
+              >
+                {t('ndef.erase')}
+              </Button>
+              <span className="grow" />
+              {/* D14: back to the start, right next to the main action on every tag screen. */}
+              <ExitButton dirty={hasDraft} disabled={locked} onExit={() => void exitEditor()} testId="ndef-exit" />
+              <Button
+                icon={PenLine}
+                variant="primary"
+                loading={busy === 'write'}
+                disabled={!!writeWhy || locked}
+                onClick={() => void writeToTag(false)}
+                data-testid="ndef-write"
+              >
+                {t('ndef.writeToTag')}
+              </Button>
             </div>
-          ) : null}
-        </div>
-      </Card>
+            {writeWhy ? (
+              <div className="muted small ndef-why" data-testid="ndef-write-why">
+                {writeWhy}
+              </div>
+            ) : null}
+          </div>
+        </Card>
+        </>
+      )}
     </Page>
   );
 }

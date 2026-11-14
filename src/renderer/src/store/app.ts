@@ -26,7 +26,7 @@ import { unitCount } from '../lib/units';
 import { formatUid, idName, kindLabel } from '../lib/format';
 import { translate } from '../i18n';
 
-export type ViewId = 'home' | 'issue' | 'ndef' | 'schema' | 'hex' | 'backup' | 'log' | 'keys' | 'help' | 'settings';
+export type ViewId = 'home' | 'issue' | 'ndef' | 'schema' | 'hex' | 'backup' | 'erase' | 'factory' | 'log' | 'keys' | 'help' | 'settings';
 
 export type DocSource =
   | { type: 'card'; uid: string }
@@ -53,12 +53,32 @@ export interface TagDoc {
   standardKeysOnly?: boolean;
 }
 
+/**
+ * D15 (2026-11-14, "ページをまたいで読み取りステータスを保持しない"): every tag screen keeps
+ * what IT read or opened; nothing read on one screen shows up on another. `doc` is the
+ * binary editor's document (edits, undo, unsaved changes); the read / NDEF / backup screens
+ * each have their own read result in `pageDocs` (never edited in place). Passing a result
+ * to another screen is explicit (the read screen's "open in ..." buttons copy it).
+ */
+export type PageDocOwner = 'home' | 'ndef' | 'backup';
+export type DocOwner = 'hex' | PageDocOwner;
+
+/** The document of a screen. */
+export function docOf(st: { doc: TagDoc | null; pageDocs: Record<PageDocOwner, TagDoc | null> }, owner: DocOwner): TagDoc | null {
+  return owner === 'hex' ? st.doc : st.pageDocs[owner];
+}
+
+/** Which document a screen shows (null: the screen has none). */
+export function docOwnerOf(view: ViewId): DocOwner | null {
+  return view === 'hex' || view === 'home' || view === 'ndef' || view === 'backup' ? view : null;
+}
+
 /** One-shot data passed from one view to another (e.g. "use these NDEF records as an issue template"). */
 export type Handoff =
   | { kind: 'issue-ndef'; records: NdefRecordDraft[] }
   | { kind: 'issue-schema'; schemaId: string }
-  /** Use the current document as the duplicate source in the issue view. */
-  | { kind: 'issue-image' }
+  /** Use this image (a backup source) as the duplicate source in the issue view. */
+  | { kind: 'issue-image'; image: TagImage }
   /** Open the binary editor with the cursor at this unit. */
   | { kind: 'hex-goto'; unit: number };
 
@@ -120,6 +140,12 @@ export interface WriteOutcome {
    * (review R-WRITE-5).
    */
   retry?: boolean;
+  /**
+   * D15: the screen the write was made from. <LastWriteCallout /> shows the result
+   * only there (each screen keeps its own state; another screen's result is not
+   * shown next to this screen's write button). Omitted: shown everywhere.
+   */
+  view?: ViewId;
 }
 
 /** One tag handled by a batch-issue run (newest first in issueRecent). */
@@ -174,7 +200,10 @@ interface AppState {
   view: ViewId;
   /** Help topic to open when view === 'help'. */
   helpTopic: string | null;
+  /** The binary editor's document (D15). */
   doc: TagDoc | null;
+  /** The read / NDEF / backup screens' own read results (D15). */
+  pageDocs: Record<PageDocOwner, TagDoc | null>;
   past: Uint8Array[];
   future: Uint8Array[];
   toasts: Toast[];
@@ -212,6 +241,9 @@ interface AppState {
   commitDoc(image: TagImage): void;
   /** Close the current document. Does NOT ask: call `await guardDiscard()` first. */
   closeDoc(): void;
+  /** Open an image as a screen's own read result (D15). Never edited in place, so nothing to ask. */
+  openPageDoc(owner: PageDocOwner, image: TagImage, source: DocSource, opts?: { standardKeysOnly?: boolean }): void;
+  closePageDoc(owner: PageDocOwner): void;
   /** Mark / unmark a screen's own unsaved draft (key = any stable id, e.g. 'ndef'). */
   setUnsavedDraft(key: string, unsaved: boolean): void;
   /**
@@ -284,6 +316,7 @@ export const useAppStore = create<AppState>((set, get, storeApi) => {
     view: 'home',
     helpTopic: null,
     doc: null,
+    pageDocs: { home: null, ndef: null, backup: null },
     past: [],
     future: [],
     toasts: [],
@@ -400,6 +433,25 @@ export const useAppStore = create<AppState>((set, get, storeApi) => {
         past: [],
         future: [],
       });
+    },
+
+    openPageDoc(owner, image, source, opts) {
+      set((st) => ({
+        pageDocs: {
+          ...st.pageDocs,
+          [owner]: {
+            image: cloneImage(image),
+            original: cloneImage(image),
+            source,
+            revision: (st.pageDocs[owner]?.revision ?? 0) + 1,
+            ...(opts?.standardKeysOnly ? { standardKeysOnly: true } : {}),
+          },
+        },
+      }));
+    },
+
+    closePageDoc(owner) {
+      set((st) => ({ pageDocs: { ...st.pageDocs, [owner]: null } }));
     },
 
     closeDoc() {

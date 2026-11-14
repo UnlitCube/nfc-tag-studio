@@ -24,6 +24,8 @@ import { NdefView } from './views/ndef/NdefView';
 import { SchemaView } from './views/schema/SchemaView';
 import { HexView } from './views/hex/HexView';
 import { BackupView } from './views/backup/BackupView';
+import { EraseView } from './views/erase/EraseView';
+import { FactoryView } from './views/factory/FactoryView';
 import { LogView } from './views/log/LogView';
 import { KeysView } from './views/keys/KeysView';
 import { HelpView } from './views/help/HelpView';
@@ -36,6 +38,8 @@ const VIEWS: Record<ViewId, ComponentType> = {
   schema: SchemaView,
   hex: HexView,
   backup: BackupView,
+  erase: EraseView,
+  factory: FactoryView,
   log: LogView,
   keys: KeysView,
   help: HelpView,

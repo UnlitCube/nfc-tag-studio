@@ -51,6 +51,8 @@
 | D11 | ストレージ方式（PaSoRi など）では NTAG のパスワード欄を無効にして理由を出す。main はパスワードを黙って飛ばさず `READER_NO_AUTH`。一括発行のパスワード保護は語の入力つきの強い確認 | PaSoRi は PWD_AUTH を送れない。保護したタグを後から読み書きできなくなる（R-UX-1） |
 | D12 | 英語の「未書き込みの変更」は "Unsaved changes" にそろえる | 画面ごとに "Unwritten" と "Unsaved" が混在していた |
 | D13 | 書き込みの結果は LastWriteCallout が残すので、書き込みの成功トーストは出さない。トーストは主ボタンに重ねず、確認ダイアログの間は奥へ。同じ内容はまとめる。「処理中」の帯は確定してから | 読み取り直後のトーストが「タグに書き込む」を約 4.5 秒覆い、押しても反応しなかった（E2E で 0.5 秒ごとに実測） |
+| D14 | タグの画面（NDEF 編集・バイナリ編集・バックアップ・複製・消去）は、読み取る（ファイルを開く・新規作成する）までは入口だけを出し、編集の欄を出さない。画面の下の主の操作のすぐ左に、同じ語の戻るボタンを置く（未書き込みの変更があれば「キャンセル」で確認してから捨てる、無ければ「閉じる」）。戻ると入口に戻り、置いたままのタグは勝手に読み直さない（自動読み取りは 1 回の置き方に 1 回）。消去の画面は、置いただけでは読み取らない（2026-11-13 の依頼「読み取りまで編集画面は表示しない、編集キャンセルしたら読み込みから戻るなど操作の一貫性」） | NDEF 編集だけが読み取る前から編集欄とプレビューを出していた。戻る操作はバイナリ編集の上の帯の「閉じる」だけで、NDEF 編集とバックアップには無かった |
+| D15 | 画面ごとに読み取りの状態を持ち、別の画面で読み取ったタグを引き継がない（2026-11-14 の依頼「ページをまたいで読み取りステータスを保持しない方がいい（NDEF 編集で、新規作成か既存タグの読み取り → 編集 → 保存か書き込み）」）。ホーム・NDEF 編集・バックアップの読み取り結果は `store.pageDocs.<画面>`（編集しない）、バイナリ編集の文書（編集・元に戻す・未書き込みの確認）は今までどおり `store.doc`。自動読み取りと［このタグを読み取る］は、見ている画面の文書にだけ入れる。消去・完全初期化は文書を持たない。画面を移っても、それぞれの画面の作業中の状態は残る（D3）。別の画面へ渡すのは、ホームの［バイナリ編集で開く］［NDEF 編集で開く］［バックアップ・複製で開く］と、バックアップ・NDEF 編集の［一括発行へ］だけで、どれも押したときの一方向の写し。書き込みは `WriteUi.doc` で、どの画面の文書から書くかを言い、バイナリ編集の文書だけが書き込みの後にタグを読み直して追従する。書き込みの結果（LastWriteCallout）は書いた画面にだけ出す。一括発行のタグの種類の既定は、置かれているタグだけから決める | 文書が 1 つしかなく、ホームで読んだタグがそのまま NDEF 編集・バックアップ・バイナリ編集に出ていた。NDEF 編集で書いたあとにバイナリ編集の文書が置き換わる・バックアップの「複製」の確認に、バイナリ編集で開いている別のタグの UID が出る、が起き得た。代案: 1 つの文書を全画面で共有したまま「どの画面で読んだか」を出す（画面の数だけ説明が要り、取り違えは残る） |
 
 ## 契約の変更（統括が凍らせたもの）
 
@@ -59,6 +61,7 @@
 - `src/shared/errorMessages.ts`（新規）: ErrorCode ごとの ja/en の文。「何が起きて・次に何をするか」。main の `errors.ts` と renderer が共有する。
 - `src/main/nfc/contract.ts`: `createNfcService(deps, init?)`、`deps.allKeyIds()`、`NfcServiceInit`、`reidentify()`、`waitForCard(signal, { detectedAfter })`。
 - renderer: `store/app.ts`（`guardDiscard`・`rebaseDoc`・`markWritten`・`busyOp`・`lastWrite`・`issueRecent`・`issueLastRun`・`dirtyUnits`）、`lib/ops.ts`（`readCurrentTag(opts, { guard })`・`readTarget`・`WriteUi.target`）、`lib/readerState.ts`、`lib/viewActive.ts`、`components/TagOnReader.tsx`、`components/LastWriteCallout.tsx`。
+- D15（2026-11-14）: `store/app.ts` に `pageDocs`・`openPageDoc`・`closePageDoc`・`docOf`・`docOwnerOf`、`WriteOutcome.view`、`Handoff` の `issue-image` に `image`。`lib/ops.ts` に `readCurrentTag(opts, { into })`・`WriteUi.doc`。
 
 ## 次にやること
 

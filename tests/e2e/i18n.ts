@@ -10,8 +10,10 @@ import ndef from '../../src/renderer/src/i18n/ndef';
 import schema from '../../src/renderer/src/i18n/schema';
 import issue from '../../src/renderer/src/i18n/issue';
 import backup from '../../src/renderer/src/i18n/backup';
+import erase from '../../src/renderer/src/i18n/erase';
+import factory from '../../src/renderer/src/i18n/factory';
 
-const ja = { ...common.ja, ...shell.ja, ...hex.ja, ...ndef.ja, ...schema.ja, ...issue.ja, ...backup.ja };
+const ja = { ...common.ja, ...shell.ja, ...hex.ja, ...ndef.ja, ...schema.ja, ...issue.ja, ...backup.ja, ...erase.ja, ...factory.ja };
 export type MsgKey = keyof typeof ja;
 
 /** Japanese text of `key` (the default UI language). */

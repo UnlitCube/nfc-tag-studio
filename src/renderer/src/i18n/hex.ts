@@ -58,7 +58,6 @@ export default defineMessages({
     'hex.doc.open': 'ファイルを開く…',
     'hex.doc.newBtn': '新規作成…',
     'hex.doc.save': 'ファイルに保存…',
-    'hex.doc.close': '閉じる',
     'hex.doc.saveHint': '編集中の内容（未書き込みの変更を含む）を、PC にファイルとして保存します。タグには書き込みません。',
     'hex.doc.writeHint': '編集中の内容を、リーダーの上のタグに書き込みます。ファイルには保存しません。',
 
@@ -376,7 +375,6 @@ export default defineMessages({
     'hex.doc.open': 'Open file…',
     'hex.doc.newBtn': 'New…',
     'hex.doc.save': 'Save to file…',
-    'hex.doc.close': 'Close',
     'hex.doc.saveHint': 'Saves the current content (including the unsaved changes not yet written to the tag) as a file on this PC. Nothing is written to the tag.',
     'hex.doc.writeHint': 'Writes the current content to the tag on the reader. Nothing is saved to a file.',
 

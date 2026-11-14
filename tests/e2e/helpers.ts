@@ -9,7 +9,7 @@ import type { ReaderStatus } from '../../src/shared/types';
 import { SHOTS_DIR, assertVirtualOnly } from './launch';
 import { t } from './i18n';
 
-export type ViewId = 'home' | 'issue' | 'ndef' | 'schema' | 'hex' | 'backup' | 'log' | 'keys' | 'help' | 'settings';
+export type ViewId = 'home' | 'issue' | 'ndef' | 'schema' | 'hex' | 'backup' | 'erase' | 'factory' | 'log' | 'keys' | 'help' | 'settings';
 
 /** "04A1B2" -> "04:A1:B2" (same as the app's formatUid). */
 export function formatUid(hex: string): string {
@@ -168,6 +168,19 @@ export async function startWithReadTag(page: Page, kind: TagKind = 'NTAG215'): P
   if (!s.card) throw new Error('no card after enabling the simulator');
   await expect(home.getByTestId('home-doc-body').getByTestId('uid-text')).toHaveText(formatUid(s.card.uid));
   return s.card.uid;
+}
+
+/**
+ * D15: each screen keeps its own document. Take the tag read on the home screen to
+ * another screen with its "Open in ..." button (a one-way copy) and wait for it.
+ */
+export async function openFromHome(page: Page, target: 'hex' | 'ndef' | 'backup'): Promise<Locator> {
+  const home = view(page, 'home');
+  await expect(home).toBeVisible();
+  await home.getByTestId(`home-to-${target}`).click();
+  const v = view(page, target);
+  await expect(v).toBeVisible();
+  return v;
 }
 
 /** What is on top at the centre of `target`: 'self', 'toast' or the class of the covering element. */

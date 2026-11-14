@@ -22,8 +22,12 @@ const BYTE = 40; // page 10, byte 0
 
 test('E4 タグ A の編集を別のタグ B に書き込む: 確認に「別のタグ」と B の UID、B の UID は変わらない', async ({ nfc }) => {
   const { app, page } = nfc;
-  const uidA = await startWithReadTag(page, 'NTAG215');
+  await startWithReadTag(page, 'NTAG215');
+  // D15: the binary editor reads the tag itself (the home screen's read is not carried over).
   const hex = await nav(page, 'hex');
+  await hex.getByTestId('hex-read').click();
+  await expect(hex.getByTestId('hex-docbar')).toContainText(t('hex.doc.clean'));
+  const uidA = (await readerStatus(page)).card!.uid;
   await editByte(page, BYTE, 'C7');
 
   await newTag(page, 'NTAG215');

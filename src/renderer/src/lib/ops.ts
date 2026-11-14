@@ -25,8 +25,8 @@ import { AppError, api, errorText } from './api';
 import { beep } from './sound';
 import { formatUid, idName, kindLabel } from './format';
 import { unitCount, unitList } from './units';
-import { dirtyUnits, errorToast, useAppStore } from '../store/app';
-import type { TagDoc, WriteOutcome } from '../store/app';
+import { dirtyUnits, docOf, errorToast, useAppStore } from '../store/app';
+import type { DocOwner, TagDoc, WriteOutcome } from '../store/app';
 import { translate } from '../i18n';
 
 function lang(): LanguageSetting {
@@ -124,13 +124,19 @@ export function deniedCount(img: TagImage): number {
  * (store.busyOp / a confirmation of one) - the views keep the button disabled
  * then (tagOpBlock).
  */
-export async function readCurrentTag(opts: ReadOptions = {}, o: { guard?: boolean; standardKeysOnly?: boolean } = {}): Promise<TagImage | null> {
+export async function readCurrentTag(
+  opts: ReadOptions = {},
+  o: { guard?: boolean; standardKeysOnly?: boolean; into?: DocOwner } = {},
+): Promise<TagImage | null> {
   const st = useAppStore.getState();
   if (tagOpRunning()) return null;
   if (refuseWhileIssuing()) return null;
+  // D15: the result goes to the screen that read it - the binary editor's document
+  // (default) or a screen's own read result, never another screen's.
+  const into: DocOwner = o.into ?? 'hex';
   pendingOp = 'read';
   try {
-    if (o.guard !== false && !(await st.guardDiscard())) return null;
+    if (into === 'hex' && o.guard !== false && !(await st.guardDiscard())) return null;
     let img: TagImage;
     st.setBusyOp('read');
     try {
@@ -163,7 +169,9 @@ export async function readCurrentTag(opts: ReadOptions = {}, o: { guard?: boolea
       }
     }
     const standardOnly = !!o.standardKeysOnly && c.denied > 0 && isMifare(img.kind);
-    useAppStore.getState().openImage(img, { type: 'card', uid: img.uid }, standardOnly ? { standardKeysOnly: true } : undefined);
+    const openOpts = standardOnly ? { standardKeysOnly: true } : undefined;
+    if (into === 'hex') useAppStore.getState().openImage(img, { type: 'card', uid: img.uid }, openOpts);
+    else useAppStore.getState().openPageDoc(into, img, { type: 'card', uid: img.uid }, openOpts);
     const lines = readSummaryLines(img, l);
     if (standardOnly) lines.push(translate(l, 'op.read.standardKeysOnly'));
     st.toast({
@@ -263,6 +271,15 @@ export interface WriteUi {
    * new document; the result says so ('dropped').
    */
   docCopy?: boolean;
+  /**
+   * D15 (2026-11-14): the document this write is made from - each screen has its own.
+   * 'hex' (default): the binary editor's document, which the write may update
+   * (refresh / rebase / mark written). A screen's read result ('home' / 'ndef' /
+   * 'backup') only words the confirmation ("copy of tag X") and is never changed;
+   * null: no document (erase, full reset - they read their own target). Only 'hex'
+   * re-reads after the write (`refresh` is ignored for the others).
+   */
+  doc?: DocOwner | null;
 }
 
 /** Errors main raises BEFORE writing anything (the tag is untouched). */
@@ -701,9 +718,14 @@ export async function writeWithConfirm(req: WriteRequest, ui: WriteUi): Promise<
     return null;
   }
   pendingOp = 'write';
+  // D15: which document the write is made from (another screen's is never looked at).
+  const owner: DocOwner | null = ui.doc === undefined ? 'hex' : ui.doc;
+  /** The screen the write is made from: its result is shown there only (D15). */
+  const fromView = st.view;
+  const docOfWrite = (): TagDoc | null => (owner ? docOf(useAppStore.getState(), owner) : null);
   try {
     const l = lang();
-    const texts = writeConfirmTexts(useAppStore.getState().doc, req, ui, l);
+    const texts = writeConfirmTexts(docOfWrite(), req, ui, l);
     const mustConfirm = ui.dangerous || !!ui.typeToConfirm || (!ui.skipConfirm && (st.settings.confirmBeforeWrite || texts.force));
     if (mustConfirm) {
       const details = [...(ui.details ?? []), translate(l, 'op.write.confirm.keepPlaced')];
@@ -722,7 +744,7 @@ export async function writeWithConfirm(req: WriteRequest, ui: WriteUi): Promise<
     }
     useAppStore.getState().setBusyOp('write');
 
-    const docBefore = useAppStore.getState().doc;
+    const docBefore = docOfWrite();
     let res: WriteResult;
     try {
       res = await api.writeTag(req);
@@ -739,6 +761,7 @@ export async function writeWithConfirm(req: WriteRequest, ui: WriteUi): Promise<
         uid: ui.target?.uid ?? req.expectedUid ?? '',
         kind: req.kind,
         reactivate: false,
+        view: fromView,
       };
       useAppStore.getState().setLastWrite(outcome);
       showWriteToast(outcome, t.technical);
@@ -748,7 +771,9 @@ export async function writeWithConfirm(req: WriteRequest, ui: WriteUi): Promise<
     const a = analyzeWrite(req, res);
     beep(a.success ? 'success' : 'error');
 
-    const refresh = ui.refresh !== false;
+    // Only the binary editor's document follows the tag after a write (D15).
+    const editorDoc = owner === 'hex';
+    const refresh = editorDoc && ui.refresh !== false;
     let readback: TagImage | null = null;
     if (refresh) {
       try {
@@ -761,27 +786,32 @@ export async function writeWithConfirm(req: WriteRequest, ui: WriteUi): Promise<
     }
 
     const s = useAppStore.getState();
-    const { plan, notes } = planDocAfterWrite({
-      docBefore,
-      docNow: s.doc,
-      req,
-      res,
-      refresh,
-      readback,
-      keepUnitsOnFailure: ui.keepUnitsOnFailure,
-      docCopy: ui.docCopy,
-    });
+    const { plan, notes } = editorDoc
+      ? planDocAfterWrite({
+          docBefore,
+          docNow: s.doc,
+          req,
+          res,
+          refresh,
+          readback,
+          keepUnitsOnFailure: ui.keepUnitsOnFailure,
+          docCopy: ui.docCopy,
+        })
+      : { plan: { action: 'none' } as DocPlan, notes: [] as DocNote[] };
     if (plan.action === 'commit' && readback) s.commitDoc(readback);
     else if (plan.action === 'rebase' && readback) s.rebaseDoc(readback, plan.keep);
     else if (plan.action === 'markWritten') s.markWritten(plan.writes);
 
-    const outcome = buildWriteOutcome(req, res, notes, {
-      lang: l,
-      now: Date.now(),
-      reactivateAfter: ui.reactivateAfter,
-      successTitle: ui.successTitle,
-      docKind: docBefore?.image.kind ?? null,
-    });
+    const outcome: WriteOutcome = {
+      ...buildWriteOutcome(req, res, notes, {
+        lang: l,
+        now: Date.now(),
+        reactivateAfter: ui.reactivateAfter,
+        successTitle: ui.successTitle,
+        docKind: docBefore?.image.kind ?? null,
+      }),
+      view: fromView,
+    };
     useAppStore.getState().setLastWrite(outcome);
     showWriteToast(outcome);
     return res;
