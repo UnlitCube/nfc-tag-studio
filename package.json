@@ -1,7 +1,7 @@
 {
   "name": "nfc-tag-studio",
   "productName": "NFC Tag Studio",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "NFC Tag Studio - desktop app to read, edit, back up and batch-issue the NFC tags your organization manages (NTAG213/215/216, MIFARE Classic with your own keys, FeliCa Lite-S).",
   "author": "UnlitCube",
   "license": "MIT",
