@@ -693,6 +693,21 @@ describe('TagOnReader / LastWriteCallout render', () => {
     expect(html).toContain('自動選択に戻す');
   });
 
+  it('an unsupported IC card says what it is, from its ATR, and offers no "check again" (2026-11-14)', async () => {
+    const myNumber = { readerName: 'R1', uid: 'C0A1B2C3', atr: '3B888001000005E0B381A1007F', kind: null, kindSource: null, version: null, rawCommands: false, driver: 'storage' as const, detectedAt: 1 };
+    useAppStore.setState({ reader: { ...readerWith('unsupported'), card: myNumber, cardError: 'UNSUPPORTED_TAG' } });
+    let html = await renderWith('tag');
+    expect(html).toContain('マイナンバーカード・未対応（UID C0:A1:B2:C3）');
+    expect(html).toContain('IC カードは読み書きしません（UID だけを読みます）。');
+    expect(html).not.toContain('もう一度確認');
+    // A memory tag of another kind keeps the plain wording and "check again".
+    const ulc = { ...myNumber, uid: '04112233445566', atr: '3B8F8001804F0CA00000030603003A0000000000' };
+    useAppStore.setState({ reader: { ...readerWith('unsupported'), card: ulc, cardError: 'UNSUPPORTED_TAG' } });
+    html = await renderWith('tag');
+    expect(html).toContain('MIFARE Ultralight C・未対応');
+    expect(html).toContain('もう一度確認');
+  });
+
   it('the last write stays with the reactivation hint until dismissed', async () => {
     useAppStore.setState({
       lastWrite: { at: 0, tone: 'ok', title: 'タグに書き込みました', lines: ['1 ページを書き込みました'], uid: UID_A, kind: 'NTAG213', reactivate: true },

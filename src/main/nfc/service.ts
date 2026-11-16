@@ -60,6 +60,7 @@ import type {
   WriteResult,
 } from '@shared/types';
 import { bytesEqual, bytesToHex } from '@shared/hex';
+import { isIso14443_4Atr } from '@shared/cardType';
 import { VIRTUAL_READER_NAME } from '@shared/reader';
 import { OpError } from '../errors';
 import type { BackendEvent, ReaderBackend } from './backend';
@@ -204,7 +205,7 @@ const NOT_RETRYABLE: ReadonlySet<ErrorCode> = new Set<ErrorCode>(['UNSUPPORTED_T
 export function atrSaysNotType2(atr: Uint8Array): boolean {
   const p = parseStorageAtr(atr);
   if (p) return p.standard !== 0x03; // 0x03 = ISO/IEC 14443 A part 3 (Type 2, MIFARE)
-  return atr.length >= 5 && atr[0] === 0x3b && (atr[1] & 0xf0) === 0x80 && atr[2] === 0x80 && atr[3] === 0x01;
+  return isIso14443_4Atr(atr);
 }
 
 /** PC/SC backend stand-in when PC/SC is disabled (E2E / CI: init.pcsc === false). */
@@ -431,6 +432,13 @@ export function createNfcService(deps: NfcServiceDeps, init: NfcServiceInit = {}
 
   async function identifyWith(io: ReaderIo, atrBytes: Uint8Array, uidBytes: Uint8Array, manualKind: TagKind | null): Promise<Identified> {
     if (manualKind) return { kind: manualKind, source: 'manual', version: null, unsure: null };
+
+    // An ISO/IEC 14443-4 card (an IC card: My Number card, driving licence, bank card,
+    // passport, phone) is never a tag this app edits, and the ATR says so for sure (a
+    // memory tag always has the PC/SC storage ATR). Decide from the ATR alone and send it
+    // nothing more - no CC read, no GET_VERSION, no retries (2026-11-14: a My Number card
+    // got FF B0 three times over ~2.3 s of "checking" before "unsupported").
+    if (isIso14443_4Atr(atrBytes)) return { kind: null, source: null, version: null, unsure: null };
 
     const hint = kindHintFromAtr(atrBytes);
     if (hint === 'FELICA') {

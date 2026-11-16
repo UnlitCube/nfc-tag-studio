@@ -712,18 +712,33 @@ describe('identification that cannot confirm the kind is an error with a reason,
     ac.abort();
   });
 
-  it('an ISO 14443-4 card (no Type 2 tag) is still "unsupported" after the retries', async () => {
+  it('an ISO 14443-4 card (an IC card) is "unsupported" from its ATR at once: only its UID is read, no other APDU, no retries', async () => {
     const f = devPcLayout();
     await startService(f);
     const uid = hexToBytes('08A1B2C3');
     f.placeRaw(PASORI, ISO4_ATR, (apdu) =>
-      apdu[0] === 0xff && apdu[1] === 0xca ? Uint8Array.from([...uid, 0x90, 0x00]) : Uint8Array.from([0x6a, 0x81]),
+      apdu[0] === 0xff && apdu[1] === 0xca ? Uint8Array.from([...uid, 0x90, 0x00]) : Uint8Array.from([0x69, 0x85]),
     );
     await settle(IDENTIFY_SETTLE_MS + 50);
-    expect(svc.getStatus().cardState).toBe('detecting'); // "probably unsupported" is retried first
+    expect(svc.getStatus()).toMatchObject({ cardState: 'unsupported', cardError: 'UNSUPPORTED_TAG', card: { uid: bytesToHex(uid), kind: null, atr: bytesToHex(ISO4_ATR) } });
     await settle(ALL_TRIES_MS);
-    expect(svc.getStatus()).toMatchObject({ cardState: 'unsupported', cardError: 'UNSUPPORTED_TAG', card: { uid: bytesToHex(uid), kind: null } });
+    expect(f.sentTo(PASORI).every((a) => a.startsWith('FFCA'))).toBe(true);
     await expect(svc.readTag({})).rejects.toMatchObject({ code: 'UNSUPPORTED_TAG' });
+    expect(f.sentTo(PASORI).every((a) => a.startsWith('FFCA'))).toBe(true);
+  });
+
+  it('a My Number card (2026-11-14, its real ATR): UID only, then "unsupported"', async () => {
+    const f = devPcLayout();
+    await startService(f);
+    const myNumberAtr = hexToBytes('3B888001000005E0B381A1007F');
+    const pupi = hexToBytes('C0A1B2C3');
+    f.placeRaw(PASORI, myNumberAtr, (apdu) =>
+      apdu[0] === 0xff && apdu[1] === 0xca ? Uint8Array.from([...pupi, 0x90, 0x00]) : Uint8Array.from([0x69, 0x85]),
+    );
+    await settle(ALL_TRIES_MS);
+    expect(svc.getStatus()).toMatchObject({ cardState: 'unsupported', card: { uid: bytesToHex(pupi), atr: bytesToHex(myNumberAtr) } });
+    expect(f.sentTo(PASORI).length).toBeGreaterThan(0);
+    expect(f.sentTo(PASORI).filter((a) => !a.startsWith('FFCA'))).toEqual([]);
   });
 
   it('a FeliCa card that gives no usable answer (transport failure) is a read error, not "unsupported"', async () => {

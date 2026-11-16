@@ -54,8 +54,10 @@ import { api } from '../../lib/api';
 import { readCurrentTag } from '../../lib/ops';
 import { activeReaderInfo, tagOpBlock } from '../../lib/readerState';
 import { formatDateTime, formatUid, kindLabel } from '../../lib/format';
-import { deniedHelp, docSummary, errorFollowUp, tagGuide } from '../../components/shell/readerModel';
-import type { CardFamily, ReaderProblem, TagGuide } from '../../components/shell/readerModel';
+import { cardTypeOf, deniedHelp, docSummary, errorFollowUp, tagGuide } from '../../components/shell/readerModel';
+import type { ReaderProblem, TagGuide } from '../../components/shell/readerModel';
+import { CardTypeDetails, cardRadioText } from '../../components/CardTypeDetails';
+import type { CardInfo } from '@shared/types';
 import { useReaderActions } from '../../components/shell/readerActions';
 import { goResolve } from '../../components/shell/navHistory';
 import './home.css';
@@ -81,11 +83,18 @@ export function UidText({ uid }: { uid: string }) {
   );
 }
 
-const FAMILY_KEY: Record<Exclude<CardFamily, null>, MsgKey> = {
-  type2: 'home.family.type2',
-  felica: 'home.family.felica',
-  mifare: 'home.family.mifare',
-};
+/** "規格: ISO/IEC 14443 Type A・NFC Forum Type 2" under a supported tag (from the ATR; nothing is sent). */
+function CardStandardLine({ card }: { card: CardInfo }) {
+  const t = useT();
+  const info = cardTypeOf(card);
+  const radio = info ? cardRadioText(t, info) : null;
+  if (!radio) return null;
+  return (
+    <p className="small muted" data-testid="home-card-standard">
+      {t('cardType.label.radio')}: {radio}
+    </p>
+  );
+}
 
 export function HomeView() {
   const t = useT();
@@ -433,14 +442,21 @@ function TagGuideBlock({ guide, onRead, onTrial }: { guide: TagGuide; onRead: ()
           <p>{t(guide.retrying ? 'home.detecting.retry' : 'home.detecting.body')}</p>
         </GuideFrame>
       );
-    case 'unsupported':
+    case 'unsupported': {
+      // What the card is, from its ATR (nothing more is sent to it). An IC card (My Number
+      // card, driving licence, bank card...) is said to be one, without "re-place it" and
+      // without the manual kind (it is never a tag this app edits).
+      const ct = guide.cardType;
+      const smartcard = ct?.form === 'smartcard';
+      const body = smartcard ? t('cardType.why.smartcard') : ct?.product === 'felica' ? t('cardType.why.felica') : t('home.unsupported.body');
       return (
-        <GuideFrame tone="warn" icon={AlertTriangle} title={t('home.unsupported.title')}>
-          <p>{t('home.unsupported.body')}</p>
-          {guide.family ? <p className="small muted">{t('home.unsupported.family', { family: t(FAMILY_KEY[guide.family]) })}</p> : null}
-          {reader?.card ? <ManualKind current={reader.card.kind} /> : null}
+        <GuideFrame tone="warn" icon={AlertTriangle} title={t(smartcard ? 'cardType.title.smartcard' : 'home.unsupported.title')}>
+          <p data-testid="home-unsupported-body">{body}</p>
+          {ct ? <CardTypeDetails info={ct} showAtr /> : null}
+          {reader?.card && !smartcard ? <ManualKind current={reader.card.kind} /> : null}
         </GuideFrame>
       );
+    }
     case 'error':
       return (
         <GuideFrame tone="danger" icon={AlertTriangle} title={t('home.error.title')}>
@@ -457,6 +473,7 @@ function TagGuideBlock({ guide, onRead, onTrial }: { guide: TagGuide; onRead: ()
       return (
         <GuideFrame tone="ok" icon={CheckCircle2} title={t('home.readyNew.title', { kind: kindLabel(guide.card.kind) })}>
           <p>{t('home.readyNew.body')}</p>
+          <CardStandardLine card={guide.card} />
           {guide.card.kindSource === 'manual' && guide.card.kind ? <ManualKindActive kind={guide.card.kind} /> : null}
           {readButton('home.read', true)}
         </GuideFrame>
@@ -465,6 +482,7 @@ function TagGuideBlock({ guide, onRead, onTrial }: { guide: TagGuide; onRead: ()
       return (
         <GuideFrame tone="ok" icon={CheckCircle2} title={t('home.readySame.title')}>
           <p>{t('home.readySame.body')}</p>
+          <CardStandardLine card={guide.card} />
           {guide.card.kindSource === 'manual' && guide.card.kind ? <ManualKindActive kind={guide.card.kind} /> : null}
           {readButton('home.readAgain', false)}
         </GuideFrame>
@@ -480,6 +498,7 @@ function TagGuideBlock({ guide, onRead, onTrial }: { guide: TagGuide; onRead: ()
         <GuideFrame tone="warn" icon={AlertTriangle} title={t('home.readyOther.title')}>
           <p>{body}</p>
           {guide.dirty ? <p className="small">{t('home.readyOther.dirty')}</p> : null}
+          <CardStandardLine card={guide.card} />
           {guide.card.kindSource === 'manual' && guide.card.kind ? <ManualKindActive kind={guide.card.kind} /> : null}
           {readButton('home.readThis', true)}
         </GuideFrame>

@@ -12,8 +12,10 @@
 //    never mixed in one display.
 import type { CardInfo, ErrorCode, ReaderInfo, ReaderStatus, TagImage } from '@shared/types';
 import type { TagKind } from '@shared/tags';
-import { isFelica, isMifare, isNtag, kindHintFromAtr, specFor } from '@shared/tags';
+import { isFelica, isMifare, isNtag, specFor } from '@shared/tags';
 import { hexToBytes } from '@shared/hex';
+import { cardTypeFromAtr } from '@shared/cardType';
+import type { CardTypeInfo } from '@shared/cardType';
 import { readImageNdef } from '../../views/ndef/ndefPages';
 import type { DocSource, TagDoc } from '../../store/app';
 import { dirtyUnits } from '../../store/app';
@@ -92,17 +94,16 @@ export function statusReaderTone(r: StatusReader): StatusTone {
 // Tag on the reader
 // ---------------------------------------------------------------------------
 
-/** Family detected from the ATR, for "unsupported" explanations. */
-export type CardFamily = 'type2' | 'felica' | 'mifare' | null;
-
-export function cardFamily(card: CardInfo | null): CardFamily {
+/**
+ * What kind of card it is, from its ATR (2026-11-14, shared/cardType.ts) - for the
+ * "unsupported" explanation and the standard of a supported tag. Null without an ATR.
+ * Nothing is sent to the card for this.
+ */
+export function cardTypeOf(card: CardInfo | null): CardTypeInfo | null {
   if (!card || !card.atr) return null;
   try {
-    const h = kindHintFromAtr(hexToBytes(card.atr));
-    if (h === 'TYPE2') return 'type2';
-    if (h === 'FELICA') return 'felica';
-    if (h === 'MIFARE_CLASSIC_1K' || h === 'MIFARE_CLASSIC_4K') return 'mifare';
-    return null;
+    const uidLength = card.uid ? hexToBytes(card.uid).length : undefined;
+    return cardTypeFromAtr(hexToBytes(card.atr), uidLength);
   } catch {
     return null;
   }
@@ -123,7 +124,7 @@ export type TagGuide =
   | { kind: 'place'; virtual: boolean }
   /** retrying: an attempt already failed (the tag answers poorly; ask to hold it still in the middle). */
   | { kind: 'detecting'; retrying: boolean }
-  | { kind: 'unsupported'; family: CardFamily; error: ErrorCode | null }
+  | { kind: 'unsupported'; cardType: CardTypeInfo | null; error: ErrorCode | null }
   | { kind: 'error'; error: ErrorCode }
   /** A supported tag is ready and no document is open. */
   | { kind: 'ready-new'; card: CardInfo }
@@ -154,14 +155,14 @@ export function tagGuide(
     case 'detecting':
       return { kind: 'detecting', retrying: !!st.cardRetrying };
     case 'unsupported':
-      return { kind: 'unsupported', family: cardFamily(st.card), error: st.cardError };
+      return { kind: 'unsupported', cardType: cardTypeOf(st.card), error: st.cardError };
     case 'error':
       return { kind: 'error', error: st.cardError ?? 'CARD_UNRESPONSIVE' };
     case 'ready':
       break;
   }
   const card = st.card;
-  if (!card || !card.kind) return { kind: 'unsupported', family: cardFamily(card), error: st.cardError };
+  if (!card || !card.kind) return { kind: 'unsupported', cardType: cardTypeOf(card), error: st.cardError };
   if (!doc) return { kind: 'ready-new', card };
   if (doc.source.type === 'card' && doc.source.uid.toUpperCase() === card.uid.toUpperCase()) return { kind: 'ready-same', card };
   return {

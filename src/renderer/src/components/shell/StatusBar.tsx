@@ -11,7 +11,8 @@ import { specFor } from '@shared/tags';
 import { useT } from '../../i18n';
 import type { TFunc } from '../../i18n';
 import { formatUid, kindLabel } from '../../lib/format';
-import { statusReader, statusReaderTone } from './readerModel';
+import { cardTypeOf, statusReader, statusReaderTone } from './readerModel';
+import { cardShortName } from '../CardTypeDetails';
 import type { StatusReader, StatusTone } from './readerModel';
 
 function readerText(t: TFunc, r: StatusReader): string {
@@ -87,9 +88,12 @@ export function StatusBar() {
           cardItem = { tone: 'warn', text: t('shell.status.tagUnsupported') };
         }
         break;
-      case 'unsupported':
-        cardItem = { tone: 'warn', text: t('shell.status.tagUnsupported') };
+      case 'unsupported': {
+        // 2026-11-14: what it is, from the ATR ("マイナンバーカード・未対応").
+        const name = cardShortName(t, cardTypeOf(card));
+        cardItem = { tone: 'warn', text: name ? t('cardType.state.named', { name }) : t('shell.status.tagUnsupported') };
         break;
+      }
       case 'error':
         cardItem = { tone: 'danger', text: t('shell.status.tagError') };
         break;

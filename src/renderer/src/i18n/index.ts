@@ -12,11 +12,12 @@ import issue from './issue';
 import backup from './backup';
 import erase from './erase';
 import factory from './factory';
+import cardType from './cardType';
 
-const parts = [common, shell, hex, ndef, schema, issue, backup, erase, factory] as const;
+const parts = [common, shell, hex, ndef, schema, issue, backup, erase, factory, cardType] as const;
 
-const ja = { ...common.ja, ...shell.ja, ...hex.ja, ...ndef.ja, ...schema.ja, ...issue.ja, ...backup.ja, ...erase.ja, ...factory.ja };
-const en = { ...common.en, ...shell.en, ...hex.en, ...ndef.en, ...schema.en, ...issue.en, ...backup.en, ...erase.en, ...factory.en };
+const ja = { ...common.ja, ...shell.ja, ...hex.ja, ...ndef.ja, ...schema.ja, ...issue.ja, ...backup.ja, ...erase.ja, ...factory.ja, ...cardType.ja };
+const en = { ...common.en, ...shell.en, ...hex.en, ...ndef.en, ...schema.en, ...issue.en, ...backup.en, ...erase.en, ...factory.en, ...cardType.en };
 
 export type MsgKey = keyof typeof ja;
 export type TFunc = (key: MsgKey, vars?: Record<string, string | number>) => string;

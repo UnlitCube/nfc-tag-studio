@@ -34,6 +34,8 @@ import { formatUid, idName, kindLabel } from '../lib/format';
 import { useT } from '../i18n';
 import { Badge, Button } from './ui';
 import type { Tone } from './ui';
+import { cardTypeOf } from './shell/readerModel';
+import { cardShortName } from './CardTypeDetails';
 
 export function useOpBlockText(): (block: TagOpBlock) => string {
   const t = useT();
@@ -93,14 +95,20 @@ export function TagOnReader({ compact = false, readThis = true }: { compact?: bo
 
   const tone: Tone = state === 'ready' ? 'ok' : state === 'error' || state === 'unsupported' ? 'danger' : state === 'detecting' ? 'info' : 'neutral';
   const icon: LucideIcon = state === 'detecting' ? Loader2 : state === 'ready' ? Nfc : state === 'no-reader' ? Unplug : state === 'absent' ? ScanLine : CircleAlert;
+  // 2026-11-14: an unsupported card says what it is, from its ATR (nothing is sent to it):
+  // "マイナンバーカード・未対応", "IC カード・未対応".
+  const cardType = state === 'unsupported' ? cardTypeOf(card) : null;
+  const unsupportedName = cardShortName(t, cardType);
+  const smartcard = cardType?.form === 'smartcard';
+  const stateText = unsupportedName ? t('cardType.state.named', { name: unsupportedName }) : t(`reader.state.${state}`);
   // An unreadable tag whose UID was read (e.g. a read-protected NTAG, R-MAIN-4):
   // say which tag it is, so it does not look like "nothing / a broken tag".
   const label =
     state === 'ready' && card
       ? t('reader.state.ready', { kind: kindLabel(card.kind), idName: idName(card.kind), uid: formatUid(card.uid) })
       : (state === 'error' || state === 'unsupported') && card?.uid
-        ? t('reader.state.withUid', { state: t(`reader.state.${state}`), idName: idName(card.kind), uid: formatUid(card.uid) })
-        : t(`reader.state.${state}`);
+        ? t('reader.state.withUid', { state: stateText, idName: idName(card.kind), uid: formatUid(card.uid) })
+        : stateText;
 
   const readerName = active ? (active.virtual ? t('reader.virtual') : active.name) : null;
 
@@ -112,10 +120,16 @@ export function TagOnReader({ compact = false, readThis = true }: { compact?: bo
       : errorMessage(serviceDown ? 'NO_SERVICE' : 'NO_READER', lang);
   } else if (state === 'absent') hint = t('reader.hint.absent');
   else if (state === 'detecting') hint = t(reader?.cardRetrying ? 'reader.hint.detectingRetry' : 'reader.hint.detecting');
-  else if (state === 'unsupported') hint = reader?.cardError && reader.cardError !== 'UNSUPPORTED_TAG' ? errorMessage(reader.cardError, lang) : t('reader.hint.unsupported');
+  else if (state === 'unsupported')
+    hint = smartcard
+      ? t('cardType.hint.smartcard')
+      : reader?.cardError && reader.cardError !== 'UNSUPPORTED_TAG'
+        ? errorMessage(reader.cardError, lang)
+        : t('reader.hint.unsupported');
   else if (state === 'error') hint = reader?.cardError ? errorMessage(reader.cardError, lang) : t('reader.hint.error');
 
-  const canRetry = state === 'error' || state === 'unsupported';
+  // An IC card stays an IC card: "check again" would only send it more commands.
+  const canRetry = state === 'error' || (state === 'unsupported' && !smartcard);
   // The tag on the reader is not the open document (FIRST-3 / CARD-1). Not while
   // batch issuing: every tag issued is "another tag", the note would only confuse.
   const otherTag =

@@ -9,7 +9,7 @@ import type { TagKind } from '../src/shared/tags';
 import { imageSize, specFor } from '../src/shared/tags';
 import type { TagDoc } from '../src/renderer/src/store/app';
 import {
-  cardFamily,
+  cardTypeOf,
   deniedHelp,
   docOnReader,
   docSummary,
@@ -171,10 +171,32 @@ describe('tagGuide (FIRST-1..4, CARD-3, CARD-9, CARD-12, FLOW-10)', () => {
     expect(tagGuide(sim, null, ops)).toEqual({ kind: 'place', virtual: true });
   });
 
-  it('cardFamily reads the PC/SC storage ATR (FeliCa / Type 2)', () => {
-    expect(cardFamily(card('01', null, PASORI.name, '3B8F8001804F0CA0000003061100000000008A'))).toBe('felica');
-    expect(cardFamily(card('04', null, PASORI.name, '3B8F8001804F0CA0000003060300030000000068'))).toBe('type2');
-    expect(cardFamily(card('04', null, PASORI.name, ''))).toBeNull();
+  it('cardTypeOf reads the ATR (FeliCa / Type 2 / an IC card), and nothing without one', () => {
+    expect(cardTypeOf(card('0114B3A1C2D3E4F5', null, PASORI.name, '3B8F8001804F0CA0000003061100000000008A'))).toMatchObject({
+      radio: 'felica',
+      product: 'felica',
+      form: 'memory',
+    });
+    expect(cardTypeOf(card('04112233445566', null, PASORI.name, '3B8F8001804F0CA0000003060300030000000068'))).toMatchObject({
+      radio: 'iso14443a',
+      product: 'type2',
+      nfcType: 2,
+    });
+    expect(cardTypeOf(card('C0A1B2C3', null, PASORI.name, '3B888001000005E0B381A1007F'))).toMatchObject({
+      form: 'smartcard',
+      radio: 'iso14443b',
+      radioGuessed: true,
+      product: 'mynumber',
+      productByAtr: true,
+    });
+    expect(cardTypeOf(card('04', null, PASORI.name, ''))).toBeNull();
+  });
+
+  it('an unsupported card carries its type to the home guide', () => {
+    const s = pasoriActive({ cardState: 'unsupported', cardError: 'UNSUPPORTED_TAG', card: card('C0A1B2C3', null, PASORI.name, '3B888001000005E0B381A1007F') });
+    const g = tagGuide(s, null, ops);
+    expect(g.kind).toBe('unsupported');
+    expect(g.kind === 'unsupported' && g.cardType?.product).toBe('mynumber');
   });
 });
 

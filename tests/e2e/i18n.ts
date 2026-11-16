@@ -12,8 +12,9 @@ import issue from '../../src/renderer/src/i18n/issue';
 import backup from '../../src/renderer/src/i18n/backup';
 import erase from '../../src/renderer/src/i18n/erase';
 import factory from '../../src/renderer/src/i18n/factory';
+import cardType from '../../src/renderer/src/i18n/cardType';
 
-const ja = { ...common.ja, ...shell.ja, ...hex.ja, ...ndef.ja, ...schema.ja, ...issue.ja, ...backup.ja, ...erase.ja, ...factory.ja };
+const ja = { ...common.ja, ...shell.ja, ...hex.ja, ...ndef.ja, ...schema.ja, ...issue.ja, ...backup.ja, ...erase.ja, ...factory.ja, ...cardType.ja };
 export type MsgKey = keyof typeof ja;
 
 /** Japanese text of `key` (the default UI language). */

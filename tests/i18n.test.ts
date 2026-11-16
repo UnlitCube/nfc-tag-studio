@@ -22,7 +22,9 @@ const BANNED_JA: { re: RegExp; use: string }[] = [
   { re: /タグ(を|が)外/u, use: '「離す」（リーダーから離す）' },
   { re: /単位/u, use: '「ページ」「ブロック」（内部の言葉の「単位」を画面に出さない）' },
   // 「スマートカード サービス」「スマートカードリーダー」は Windows / 機器の名前なので許す。
-  { re: /(?<!スマート)カード/u, use: '「タグ」' },
+  // 2026-11-14: タグではない IC カードとその名前（マイナンバーカード・住民基本台帳カード・
+  // クレジットカード）も許す。置かれたものを「タグ」と呼ぶ決まりは変えない（「カードを置いて」は不可）。
+  { re: /(?<!スマート|IC |マイナンバー|住民基本台帳|クレジット)カード/u, use: '「タグ」' },
   { re: /\.\.\./u, use: '「…」（U+2026）' },
   { re: /�/u, use: '（置換文字。文字化け）' },
 ];
@@ -92,6 +94,8 @@ describe('D7 terms (Japanese UI)', () => {
     expect(bannedHits([['x', '処理中...']]).length).toBe(1);
     // allowed
     expect(bannedHits([['x', 'スマートカード サービスに接続できません']])).toEqual([]);
+    expect(bannedHits([['x', 'IC カード（マイナンバーカード・住民基本台帳カード・クレジットカード）']])).toEqual([]);
+    expect(bannedHits([['x', 'カードの種類']]).length).toBe(1);
     expect(bannedHits([['x', 'テンプレートを外す']])).toEqual([]);
     expect(bannedHits([['x', 'タグをリーダーの上に置いてください']])).toEqual([]);
   });
